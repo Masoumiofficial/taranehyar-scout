@@ -102,10 +102,13 @@ class Publisher {
         if ($this->should_transfer_file($discovery, $payload)) {
             $state_machine->transition_to(StateMachine::STATE_TRANSFERRING_FILE);
             $file_name = $this->build_file_name($discovery);
+            // استفاده از title_en برای نام فایل HostDL (سازگار با مسیر آرشیو ترانه‌یار)
+            $transfer_title = !empty($discovery['title_en']) ? $discovery['title_en'] : $discovery['title'];
+            $transfer_artist = !empty($discovery['artist_en']) ? $discovery['artist_en'] : $discovery['artist_fa'];
             $transfer_data = $this->hostdl->build_music_transfer_data(
                 $discovery,
-                $discovery['artist_en'],
-                $discovery['title'],
+                $transfer_artist,
+                $transfer_title,
                 $file_name
             );
             
