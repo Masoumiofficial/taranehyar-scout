@@ -1,5 +1,25 @@
 # Changelog - Taranehyar Scout
 
+## 1.0.4 - 2026-10-17
+
+### ویژگی جدید: پشتیبانی از نیک موزیک
+- **NicMusicProvider.php** اضافه شد - https://nicmusic.net/
+  - جستجو: `?s={artist}` استاندارد وردپرس
+  - استخراج دقیق: `**محسن یگانه** به نام **دیوار**` و `By **Mohsen Yeganeh** Called **Divar**`
+  - کاور از `/wp-content/uploads/` با حذف thumbnail
+  - MP3 از `musitraf.com` مستقیم (320 و 128)
+  - متن ترانه ورس به ورس از `متن آهنگ` تا `لینک های دانلود`
+  - بدون نیاز به دور زدن reCAPTCHA (برخلاف ganja2music.com)
+- **ganja2music.com** بررسی شد: محافظت reCAPTCHA Enterprise دارد و برای provider خودکار مناسب نیست - در صورت ارائه API رسمی قابل اضافه شدن است
+- **ProviderRegistry** به‌روزرسانی: ثبت nicmusic
+- **UrlValidator**: دامنه‌های nicmusic و ganja2music به لیست مجاز اضافه شد
+- **Activator**: سیاست پیش‌فرض برای nicmusic
+
+### رفع باگ عنوان "دانلود آهنگ Mohsen Yeganeh به نام محسن یگانه زندگیم سوخت" (از 1.0.3 به 1.0.4 منتقل شد)
+- Provider mybia2music: clean_fa_title برای حالت بدون دانلود آهنگ و با "از"، fallback از lyricist
+- Normalizer و Publisher: بازیابی artist_fa فارسی از metadata اگر انگلیسی بود
+- عنوان نهایی: "دانلود آهنگ محسن یگانه به نام زندگیم سوخت"
+
 ## 1.0.3 - 2026-10-17
 
 ### رفع باگ عنوان "دانلود آهنگ Mohsen Yeganeh به نام محسن یگانه زندگیم سوخت"

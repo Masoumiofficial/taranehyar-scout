@@ -85,6 +85,8 @@ class UrlValidator {
         
         $allowed_domains = array(
             'mybia2music' => array('mybia2music.com', 'sv2.mybia2music.com', 'sv.mybia2music.com', 'www.mybia2music.com'),
+            'nicmusic' => array('nicmusic.net', 'www.nicmusic.net', 'nicmusic.musitraf.com', 'musitraf.com'),
+            'ganja2music' => array('ganja2music.com', 'www.ganja2music.com'),
             'mock' => array('example.com', 'mock.local'),
         );
         

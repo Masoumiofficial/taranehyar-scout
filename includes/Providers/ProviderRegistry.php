@@ -15,6 +15,7 @@ class ProviderRegistry {
         
         // Register built-in providers
         self::register(new MyBia2MusicProvider());
+        self::register(new NicMusicProvider());
         self::register(new MockProvider());
         
         self::$initialized = true;
