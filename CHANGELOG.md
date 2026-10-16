@@ -1,5 +1,23 @@
 # Changelog - Taranehyar Scout
 
+## 1.0.7 - 2026-10-17
+
+### ویژگی جدید: پشتیبانی از گانجا2موزیک
+- **Ganja2MusicProvider.php** اضافه شد - https://www.ganja2music.com/
+  - جستجو: `?s={artist}` پارامتر استاندارد وردپرس با پارس `/ID/slug/` و کارت‌های نتایج
+  - تشخیص صفحه reCAPTCHA: `is_recaptcha_page()` با WP_Error `recaptcha_blocked` - کاربر با پیام فارسی مطلع می‌شود
+  - استخراج دقیق: `دانلود آهنگ X به نام Y` → artist_fa و track_fa فارسی خالص
+  - EN: `Artist – Track` یا slug به EN (Kaveh Zhav Sunrise)
+  - کاور از `wp-content/uploads/` با حذف thumbnail (-300x300)
+  - MP3 لینک‌های 128 و 320 از `ganja2music.com` یا `dl` ساب‌دامین
+  - متن ترانه ورس به ورس + اعتبارات Lyrics/Music/Arrangement/Mix/Producer
+  - نرخ محدود: 3 ثانیه بین درخواست‌ها
+  - تست زمینه: 1187787 kaveh-zhav-sunrise و 1187747 roozbeh-bemani-booseye-akhar (هر دو هنگام تست reCAPTCHA quota exceeded داشتند - هندل شد)
+- **nicmusic** بررسی شد: در زمان تست، nicmusic.net بدون reCAPTCHA و قابل استفاده است - مشکل گزارش‌شده احتمالاً موقتی بوده یا مربوط به یک آهنگ خاص
+- **Activator**: سیاست پیش‌فرض برای ganja2music (rate_limit 3, license needs_review)
+- **ProviderRegistry**: ثبت Ganja2MusicProvider
+- ساختار ZIP صحیح حفظ شد: `taranehyar-scout/taranehyar-scout.php`
+
 ## 1.0.6 - 2026-10-17
 
 ### رفع خطای "پرونده افزونه پیدا نشد"
