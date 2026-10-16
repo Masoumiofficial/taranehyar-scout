@@ -131,7 +131,8 @@ class HostDLAdapter {
     }
     
     /**
-     * Validate file before transfer
+     * Validate file before transfer - نسخه سبک برای جلوگیری از خطای آپلود
+     * HEAD ممکن است توسط mybia2music مسدود شود، پس فقط extension را چک می‌کنیم
      */
     public function validate_file($url, $allowed_types = array('mp3')) {
         $valid = UrlValidator::validate($url);
@@ -139,47 +140,32 @@ class HostDLAdapter {
             return $valid;
         }
         
-        // Check extension
+        // Check extension - فقط همین
         $path = parse_url($url, PHP_URL_PATH);
         $ext = strtolower(pathinfo($path, PATHINFO_EXTENSION));
         
         if (!empty($allowed_types) && !in_array($ext, $allowed_types, true)) {
-            return new \WP_Error('invalid_ext', "پسوند فایل ({$ext}) مجاز نیست. مجاز: " . implode(', ', $allowed_types));
+            // اگر پسوند mp3 نیست ولی URL شامل .mp3 است (با query)، قبول کن
+            if (stripos($url, '.mp3') === false) {
+                return new \WP_Error('invalid_ext', "پسوند فایل ({$ext}) مجاز نیست. مجاز: " . implode(', ', $allowed_types));
+            }
         }
         
-        // Check file size via HEAD request (optional)
-        $head = wp_remote_head($url, array('timeout' => 15));
+        // HEAD اختیاری - اگر 200 نبود، فقط لاگ می‌کنیم و اجازه می‌دهیم
+        $head = wp_remote_head($url, array('timeout' => 10, 'redirection' => 2));
         if (!is_wp_error($head)) {
             $code = wp_remote_retrieve_response_code($head);
-            if ($code !== 200) {
-                return new \WP_Error('file_not_found', "فایل یافت نشد (HTTP {$code})");
-            }
-            
             $headers = wp_remote_retrieve_headers($head);
             $content_length = isset($headers['content-length']) ? intval($headers['content-length']) : 0;
-            $content_type = isset($headers['content-type']) ? $headers['content-type'] : '';
-            
-            // Check size limit (100MB default)
-            $max_size = 100 * 1024 * 1024;
+            $max_size = 150 * 1024 * 1024; // 150MB
             if ($content_length > $max_size) {
                 return new \WP_Error('file_too_large', "حجم فایل بیش از حد مجاز است ({$content_length} بایت)");
             }
-            
-            // Check MIME type
-            if (!empty($content_type)) {
-                $allowed_mimes = array('audio/mpeg', 'audio/mp3', 'video/mp4', 'image/jpeg', 'image/png', 'image/webp');
-                $is_allowed = false;
-                foreach ($allowed_mimes as $mime) {
-                    if (strpos($content_type, $mime) !== false) {
-                        $is_allowed = true;
-                        break;
-                    }
-                }
-                // For now, don't strictly enforce MIME, just log
-                if (!$is_allowed) {
-                    Logger::warning('Unexpected MIME type', array('url' => $url, 'mime' => $content_type));
-                }
+            if ($code !== 200) {
+                Logger::warning('HEAD non-200 but allowing', array('url' => $url, 'code' => $code));
             }
+        } else {
+            Logger::info('HEAD failed but allowing', array('url' => $url, 'error' => $head->get_error_message()));
         }
         
         return true;

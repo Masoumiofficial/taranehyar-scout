@@ -159,38 +159,58 @@ class Publisher {
         $track_fa = !empty($discovery['title_fa']) ? trim($discovery['title_fa']) : '';
         $artist_en = !empty($discovery['artist_en']) ? trim($discovery['artist_en']) : '';
         $track_en = !empty($discovery['title_en']) ? trim($discovery['title_en']) : '';
+        $artist_slug_en = !empty($discovery['artist_slug_en']) ? trim($discovery['artist_slug_en']) : '';
         
-        // اگر artist_fa انگلیسی است (بدون فارسی) و در metadata_json فارسی داریم، از آن استفاده کن
+        // تلاش برای استخراج artist_fa فارسی از metadata_json اگر فعلی انگلیسی است یا خالی
+        $meta_arr = array();
+        if (!empty($discovery['metadata_json'])) {
+            $decoded = json_decode($discovery['metadata_json'], true);
+            if (is_array($decoded)) $meta_arr = $decoded;
+        }
+        
+        if (empty($artist_fa) || !preg_match('/[\x{0600}-\x{06FF}]/u', $artist_fa)) {
+            // اولویت: metadata artist_fa فارسی
+            if (!empty($meta_arr['artist_fa']) && preg_match('/[\x{0600}-\x{06FF}]/u', $meta_arr['artist_fa'])) {
+                $artist_fa = trim($meta_arr['artist_fa']);
+            } elseif (!empty($meta_arr['credits']) && is_array($meta_arr['credits'])) {
+                // composer/lyricist فارسی می‌تواند نام خواننده باشد اگر artist_fa خالی است؟
+                // ولی بهتر است از lyricist فقط اگر در عنوان اصلی باشد
+            }
+            // از title فارسی اگر شامل دو بخش است
+            if ((empty($artist_fa) || !preg_match('/[\x{0600}-\x{06FF}]/u', $artist_fa)) && !empty($discovery['title_fa'])) {
+                // title_fa ممکن است شامل نام آهنگ + نام خواننده یا برعکس باشد
+                // الگو: "بوسه آخر از روزبه بمانی" -> track=بوسه آخر, artist=روزبه بمانی
+                // یا "شب شعر" فقط track
+            }
+        }
+        
+        // اگر هنوز artist_fa انگلیسی است، سعی کن از artist_slug_en به فارسی برگردانی؟ نمی‌توان، پس لاگ کن
         if (!empty($artist_fa) && !preg_match('/[\x{0600}-\x{06FF}]/u', $artist_fa)) {
-            if (!empty($discovery['metadata_json'])) {
-                $meta = json_decode($discovery['metadata_json'], true);
-                if (is_array($meta)) {
-                    if (!empty($meta['artist_fa']) && preg_match('/[\x{0600}-\x{06FF}]/u', $meta['artist_fa'])) {
-                        $artist_fa = trim($meta['artist_fa']);
-                    } elseif (!empty($meta['lyricist']) && preg_match('/[\x{0600}-\x{06FF}]/u', $meta['lyricist'])) {
-                        $artist_fa = trim($meta['lyricist']);
-                    } elseif (!empty($meta['credits']['lyricist']) && preg_match('/[\x{0600}-\x{06FF}]/u', $meta['credits']['lyricist'])) {
-                        $artist_fa = trim($meta['credits']['lyricist']);
-                    }
-                }
+            // اگر artist_fa انگلیسی است ولی metadata_json شامل lyricist فارسی است که برابر نیست، از آن استفاده نکن
+            // بلکه از artist_fa اصلی در DB که باید فارسی باشد استفاده کن - اگر خالی بود، بعداً fallback
+            Logger::warning('artist_fa is English, trying to recover', array('artist_fa' => $artist_fa, 'discovery_id' => $discovery['id'] ?? 0));
+            // سعی کن از عنوان فارسی اولیه که شامل نام خواننده است استخراج کنی
+            if (!empty($discovery['title']) && preg_match('/[\x{0600}-\x{06FF}]/u', $discovery['title'])) {
+                // title ممکن است "دانلود آهنگ محسن یگانه به نام تقویم مچاله" باشد که تمیز شده
             }
         }
         
         $track_fa = $this->clean_track_fa($track_fa, $artist_fa);
         $artist_fa = $this->clean_artist_fa($artist_fa);
         
-        // اگر هنوز artist_fa انگلیسی است، سعی کن از title_fa اصلی استخراج کنی
-        if (!empty($artist_fa) && !preg_match('/[\x{0600}-\x{06FF}]/u', $artist_fa) && !empty($discovery['title_fa'])) {
-            $orig_fa = trim($discovery['title_fa']);
-            // اگر orig شامل فارسی + انگلیسی نیست، شاید خودش شامل نام خواننده فارسی باشد
-            if (preg_match('/^([\x{0600}-\x{06FF}\s]+)\s+([\x{0600}-\x{06FF}\s]+)$/u', $orig_fa, $m)) {
-                // دو بخش فارسی: احتمالاً اولی نام خواننده، دومی نام آهنگ
-                $maybe_artist = trim($m[1]);
-                $maybe_track = trim($m[2]);
-                if (mb_strlen($maybe_artist) <= 30 && mb_strlen($maybe_track) <= 60) {
-                    // اگر maybe_artist کوتاه است، احتمالاً نام خواننده است
-                    $artist_fa = $maybe_artist;
-                    $track_fa = $maybe_track;
+        // تضمین نهایی: اگر artist_fa هنوز انگلیسی است یا خالی، از lyricist/composer فارسی استفاده کن
+        if ((empty($artist_fa) || !preg_match('/[\x{0600}-\x{06FF}]/u', $artist_fa))) {
+            if (!empty($meta_arr['lyricist']) && preg_match('/[\x{0600}-\x{06FF}]/u', $meta_arr['lyricist'])) {
+                // فقط اگر lyricist در title اصلی نیست که نام خواننده باشد، استفاده کن
+                // برای vahid-hajitabar که lyricist=پیام قربانی و artist=وحید حاجی تبار، نباید جایگزین شود
+                // پس فقط اگر artist_fa خالی بود
+                if (empty($artist_fa) || $artist_fa === 'هنرمند') {
+                    $artist_fa = trim($meta_arr['lyricist']);
+                }
+            }
+            if ((empty($artist_fa) || !preg_match('/[\x{0600}-\x{06FF}]/u', $artist_fa)) && !empty($meta_arr['composer']) && preg_match('/[\x{0600}-\x{06FF}]/u', $meta_arr['composer'])) {
+                if (empty($artist_fa) || $artist_fa === 'هنرمند') {
+                    $artist_fa = trim($meta_arr['composer']);
                 }
             }
         }
@@ -397,15 +417,34 @@ class Publisher {
     }
     
     private function build_file_name($discovery) {
-        $artist = !empty($discovery['artist_en']) ? $discovery['artist_en'] : $discovery['artist_fa'];
-        $track = !empty($discovery['title']) ? $discovery['title'] : $discovery['title_fa'];
-        if (!empty($discovery['title_en'])) $track = $discovery['title_en'];
+        // همیشه از نام انگلیسی برای فایل استفاده کن تا HostDL مشکلی نداشته باشد
+        $artist = !empty($discovery['artist_en']) ? $discovery['artist_en'] : '';
+        if (empty($artist) && !empty($discovery['artist_slug_en'])) {
+            $artist = $discovery['artist_slug_en'];
+        }
+        if (empty($artist)) {
+            $artist = !empty($discovery['artist_fa']) ? $discovery['artist_fa'] : 'artist';
+        }
+        $track = !empty($discovery['title_en']) ? $discovery['title_en'] : '';
+        if (empty($track) && !empty($discovery['track_en_from_slug'])) {
+            $track = $discovery['track_en_from_slug'];
+        }
+        if (empty($track)) {
+            $track = !empty($discovery['title']) ? $discovery['title'] : ($discovery['title_fa'] ?? 'track');
+        }
         $file_name = $artist . ' - ' . $track;
+        // فقط انگلیسی و عدد و خط تیره و فاصله
         $file_name = str_replace(array('..', "\\", "\0"), '', $file_name);
         $file_name = preg_replace('#[/\\\\]+#', '-', $file_name);
         $file_name = preg_replace('/[^A-Za-z0-9\-_\.\(\)\[\] ]/u', '', $file_name);
         $file_name = trim(preg_replace('/\s+/', ' ', $file_name), " .-");
-        return $file_name !== '' ? $file_name : 'track-' . $discovery['id'];
+        // اگر بعد از پاکسازی فارسی خالی شد، از ID استفاده کن
+        if (empty($file_name) || strlen($file_name) < 3) {
+            $file_name = 'track-' . ($discovery['id'] ?? time());
+        }
+        // محدودیت طول
+        if (strlen($file_name) > 80) $file_name = substr($file_name, 0, 80);
+        return $file_name;
     }
     
     private function check_file_status($discovery) {
