@@ -1,5 +1,19 @@
 # Changelog - Taranehyar Scout
 
+## 1.0.6 - 2026-10-17
+
+### رفع خطای "پرونده افزونه پیدا نشد"
+- **علت:** در v1.0.0 تا v1.0.5 فایل ZIP با دستور `zip -r dist/taranehyar-scout.zip taranehyar-scout.php readme.txt ...` ساخته می‌شد که ساختار فلت داشت (فایل‌ها در روت ZIP بدون پوشه)
+- وردپرس هنگام نصب انتظار دارد ZIP شامل یک پوشه `taranehyar-scout/` باشد که داخلش `taranehyar-scout.php` باشد
+- وقتی ساختار فلت باشد، وردپرس فایل‌ها را مستقیم در `wp-content/plugins/` می‌ریزد و سپس دنبال `taranehyar-scout/taranehyar-scout.php` می‌گردد و خطای "پرونده افزونه پیدا نشد" می‌دهد
+- **رفع:** تغییر اسکریپت ساخت ZIP به:
+  ```
+  mkdir -p /tmp/build/taranehyar-scout
+  cp -r ... /tmp/build/taranehyar-scout/
+  cd /tmp/build && zip -r ... taranehyar-scout
+  ```
+- حالا ZIP شامل `taranehyar-scout/taranehyar-scout.php` است و نصب بدون خطا انجام می‌شود
+
 ## 1.0.5 - 2026-10-17
 
 ### رفع خطای بحرانی Fatal Error
