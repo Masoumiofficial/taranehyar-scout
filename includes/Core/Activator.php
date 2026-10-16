@@ -178,7 +178,11 @@ class Activator {
             );
             $updated = true;
         }
-        // غیرفعال کردن providerهای قدیمی (nicmusic, ganja2music) - فقط mybia2music و ahaang مبنا هستند
+        // مبنا فقط mybia2music - غیرفعال کردن ahaang, nicmusic, ganja2music
+        if (isset($options['provider_policies']['ahaang']) && $options['provider_policies']['ahaang']['enabled']) {
+            $options['provider_policies']['ahaang']['enabled'] = 0;
+            $updated = true;
+        }
         if (isset($options['provider_policies']['nicmusic']) && $options['provider_policies']['nicmusic']['enabled']) {
             $options['provider_policies']['nicmusic']['enabled'] = 0;
             $updated = true;
@@ -187,13 +191,22 @@ class Activator {
             $options['provider_policies']['ganja2music']['enabled'] = 0;
             $updated = true;
         }
+        // تضمین فعال بودن mybia2music و allow_audio_download
         if (isset($options['provider_policies']['mybia2music'])) {
+            if (empty($options['provider_policies']['mybia2music']['enabled'])) {
+                $options['provider_policies']['mybia2music']['enabled'] = 1;
+                $updated = true;
+            }
             if (empty($options['provider_policies']['mybia2music']['allow_audio_download'])) {
                 $options['provider_policies']['mybia2music']['allow_audio_download'] = 1;
                 $updated = true;
             }
         }
         if (empty($options['allow_external_urls'])) {
+            $options['allow_external_urls'] = 1;
+            $updated = true;
+        } else if ($options['allow_external_urls'] == 0) {
+            // حتی اگر قبلاً 0 شده، به 1 برگردان تا آپلود نشدن به معنی از دست رفتن فایل نباشد
             $options['allow_external_urls'] = 1;
             $updated = true;
         }
@@ -218,7 +231,7 @@ class Activator {
             'auto_publish' => 0,
             'enable_background_jobs' => 1,
             'cleanup_days' => 30,
-            'allow_external_urls' => 1, // اجازه استفاده از URL خارجی در صورت عدم انتقال به HostDL
+            'allow_external_urls' => 1, // تضمین آپلود حتی اگر HostDL پیکربندی نشده
             'provider_policies' => array(
                 'mybia2music' => array(
                     'enabled' => 1,
@@ -229,7 +242,7 @@ class Activator {
                     'metadata_allowed' => 1,
                 ),
                 'ahaang' => array(
-                    'enabled' => 1,
+                    'enabled' => 0, // مبنا فقط mybia2music
                     'rate_limit' => 2,
                     'license_status' => 'needs_review',
                     'allow_audio_download' => 1,

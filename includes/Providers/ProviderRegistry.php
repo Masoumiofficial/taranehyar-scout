@@ -13,11 +13,10 @@ class ProviderRegistry {
             return;
         }
         
-        // Register built-in providers - مبنا فقط mybia2music و ahaang بر اساس درخواست کاربر
+        // مبنا فقط mybia2music بر اساس درخواست کاربر - فقط بیا تو موزیک
         self::register(new MyBia2MusicProvider());
-        self::register(new AhaangProvider());
         self::register(new MockProvider());
-        // سایر providerها (NicMusic, Ganja2Music) به صورت فایل باقی می‌مانند اما ثبت نمی‌شوند تا فقط مبنا دو سایت اصلی باشد
+        // Ahaang, NicMusic, Ganja2Music فایل‌هایشان باقی می‌مانند اما ثبت نمی‌شوند
         // در صورت نیاز می‌توان از طریق فیلتر tscout_providers اضافه کرد
         
         self::$initialized = true;

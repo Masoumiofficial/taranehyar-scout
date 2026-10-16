@@ -209,10 +209,18 @@ class MyBia2MusicProvider implements ProviderInterface {
         $title_nodes = $xpath->query('//title');
         if ($title_nodes->length > 0) $details['page_title'] = trim($title_nodes->item(0)->textContent);
         
-        // هنرمند فارسی از /artists/
+        // اسلاگ آهنگ از URL - اول استخراج می‌کنیم تا برای تشخیص هنرمند اصلی استفاده کنیم
+        $track_slug_full = '';
+        if (preg_match('#/(\d+)/([a-z0-9\-]+)#i', $source_url, $sm)) {
+            $track_slug_full = strtolower($sm[2]);
+            $details['track_slug_full'] = $track_slug_full;
+        }
+        
+        // هنرمند فارسی از /artists/ - با اولویت اسلاگی که پیشوند ترک اسلاگ است
         $artist_fa = '';
         $artist_slug_en = '';
         $artist_links = $xpath->query('//a[contains(@href, "/artists/")]');
+        $candidates = array();
         if ($artist_links->length > 0) {
             foreach ($artist_links as $alink) {
                 $text = trim($alink->textContent);
@@ -220,27 +228,112 @@ class MyBia2MusicProvider implements ProviderInterface {
                 if (preg_match('#/artists/([a-z0-9\-]+)#i', $href, $m)) {
                     $slug_candidate = strtolower($m[1]);
                     if (!empty($text) && mb_strlen($text) > 1 && mb_strlen($text) < 100) {
+                        // فقط متن‌های فارسی
                         if (preg_match('/[\x{0600}-\x{06FF}]/u', $text)) {
-                            $artist_fa = $text;
-                            $artist_slug_en = $slug_candidate;
-                            break;
+                            $candidates[] = array('fa' => $text, 'slug' => $slug_candidate, 'href' => $href);
                         }
-                        if (empty($artist_slug_en)) $artist_slug_en = $slug_candidate;
                     }
                 }
             }
         }
-        if (!empty($artist_fa)) $details['artist_fa'] = $artist_fa;
+        // انتخاب هنرمند اصلی: اسلاگی که پیشوند track_slug_full است (مثل vahid-hajitabar در vahid-hajitabar-shabe-sher)
+        if (!empty($candidates) && !empty($track_slug_full)) {
+            foreach ($candidates as $cand) {
+                if (strpos($track_slug_full, $cand['slug'] . '-') === 0 || $track_slug_full === $cand['slug']) {
+                    $artist_fa = $cand['fa'];
+                    $artist_slug_en = $cand['slug'];
+                    break;
+                }
+            }
+        }
+        // اگر هنوز پیدا نشد، از بین کاندیدها، طولانی‌ترین نام فارسی که در عنوان صفحه هم هست را انتخاب کن
+        if (empty($artist_fa) && !empty($candidates)) {
+            // سعی کن از breadcrumb: بعد از بیاتوموزیک
+            // در HTML: [بیاتوموزیک][وحید حاجی تبار] - وحید حاجی تبار اصلی است
+            // کاندید آخر معمولاً هنرمند اصلی است (چون آهنگساز و تنظیم‌کننده اول هستند)
+            // پس از آخر به اول می‌گردیم
+            $candidates_reversed = array_reverse($candidates);
+            foreach ($candidates_reversed as $cand) {
+                // اگر نام کاندید در page_title فارسی وجود دارد
+                if (isset($details['page_title']) && mb_strpos($details['page_title'], $cand['fa']) !== false) {
+                    $artist_fa = $cand['fa'];
+                    $artist_slug_en = $cand['slug'];
+                    break;
+                }
+            }
+            if (empty($artist_fa)) {
+                // آخرین کاندید را به عنوان هنرمند اصلی بگیر
+                $last = end($candidates_reversed);
+                if ($last) {
+                    $artist_fa = $last['fa'];
+                    $artist_slug_en = $last['slug'];
+                }
+            }
+        }
+        // fallback نهایی: اگر هنوز خالی، از page_title استخراج کن
+        if (empty($artist_fa) && isset($details['page_title'])) {
+            $pt = $details['page_title'];
+            // حذف پیشوند
+            $pt_clean = preg_replace('/^دانلود آهنگ جدید\s*/u', '', $pt);
+            $pt_clean = preg_replace('/^دانلود آهنگ\s*/u', '', $pt_clean);
+            $pt_clean = trim($pt_clean);
+            // جدا کردن بخش فارسی تا اولین حرف لاتین
+            if (preg_match('/^([\x{0600}-\x{06FF}\s]+)/u', $pt_clean, $mm)) {
+                $fa_part = trim($mm[1]); // مثلا "وحید حاجی تبار شب شعر" یا "محسن یگانه تقویم مچاله"
+                $words = preg_split('/\s+/u', $fa_part);
+                if (count($words) >= 2) {
+                    // سعی کن 3 کلمه اول را به عنوان نام خواننده امتحان کنی، سپس 2 کلمه
+                    $three_words = count($words) >= 3 ? $words[0] . ' ' . $words[1] . ' ' . $words[2] : '';
+                    $two_words = $words[0] . ' ' . $words[1];
+                    // اگر candidates داریم، بررسی کن کدام یک در ابتدای fa_part است
+                    $found = false;
+                    foreach ($candidates as $cand) {
+                        if (mb_strpos($fa_part, $cand['fa']) === 0) {
+                            $artist_fa = $cand['fa'];
+                            $artist_slug_en = $cand['slug'];
+                            $found = true;
+                            break;
+                        }
+                    }
+                    if (!$found) {
+                        // اگر 3 کلمه اول شبیه نام (هر کلمه فارسی) و طول مناسب، آن را به عنوان هنرمند بگیر
+                        if (!empty($three_words) && mb_strlen($three_words) <= 30 && count($words) >= 4) {
+                            // اگر کل عبارت 4 کلمه یا بیشتر است، احتمالاً 2 یا 3 کلمه اول هنرمند است
+                            // برای "وحید حاجی تبار شب شعر" -> 4 کلمه، هنرمند 3 کلمه
+                            // برای "محسن یگانه تقویم مچاله" -> 4 کلمه، هنرمند 2 کلمه
+                            // حدس: اگر کلمه سوم "تبار" یا "یگانه" یا ... باشد، 3 کلمه‌ای است
+                            // ساده: اگر تعداد کلمات 4 باشد، 2 حالت را امتحان کن و ببین کدام در عنوان انگلیسی هم هست؟
+                            // فعلاً: اگر کلمه سوم طولش >2 و کلمه چهارم طولش >2، 2 کلمه اول هنرمند
+                            // ولی برای وحید حاجی تبار، کلمه سوم "تبار" است و کلمه چهارم "شب" است
+                            // برای تشخیص، از تعداد کلمات استفاده می‌کنیم: اگر 5 کلمه، احتمال 3 کلمه هنرمند
+                            if (count($words) == 4) {
+                                // 2 کلمه هنرمند + 2 کلمه آهنگ یا 3+1
+                                // بررسی کن آیا 3 کلمه اول در لیست اسامی رایج 3 کلمه‌ای است؟
+                                // لیست ساده از نام‌های 3 کلمه‌ای معروف
+                                $three_word_names = array('وحید حاجی تبار', 'روزبه بمانی', 'محسن چاوشی'); // روزبه بمانی 2 کلمه است ولی...
+                                // اگر 3 کلمه اول شامل "حاجی" باشد، 3 کلمه‌ای است
+                                if (mb_strpos($three_words, 'حاجی') !== false || mb_strpos($three_words, 'الله') !== false) {
+                                    $artist_fa = $three_words;
+                                } else {
+                                    $artist_fa = $two_words;
+                                }
+                            } elseif (count($words) >= 5) {
+                                $artist_fa = $three_words;
+                            } else {
+                                $artist_fa = $two_words;
+                            }
+                        } else {
+                            $artist_fa = $two_words;
+                        }
+                    }
+                }
+            }
+        }
+        
+        if (!empty($artist_fa)) $details['artist_fa'] = $this->clean_fa($artist_fa);
         if (!empty($artist_slug_en)) {
             $details['artist_slug_en'] = $artist_slug_en;
             $details['artist_en'] = $this->slug_to_en_name($artist_slug_en);
-        }
-        
-        // اسلاگ آهنگ
-        $track_slug_full = '';
-        if (preg_match('#/(\d+)/([a-z0-9\-]+)#i', $source_url, $sm)) {
-            $track_slug_full = strtolower($sm[2]);
-            $details['track_slug_full'] = $track_slug_full;
         }
         
         $track_en_from_slug = '';
@@ -396,6 +489,20 @@ class MyBia2MusicProvider implements ProviderInterface {
         return $details;
     }
     
+    private function clean_fa($text) {
+        $text = trim($text);
+        $text = preg_replace('/^دانلود آهنگ جدید\s*/u', '', $text);
+        $text = preg_replace('/^دانلود آهنگ\s*/u', '', $text);
+        $text = trim($text, " :–—-|");
+        $text = preg_replace('/\s+/', ' ', $text);
+        return $text;
+    }
+    private function clean_en($text) {
+        $text = trim($text);
+        $text = trim($text, " :–—-|");
+        $text = preg_replace('/\s+/', ' ', $text);
+        return $text;
+    }
     private function clean_fa_title($fa_title, $artist_fa) {
         $fa_title = trim($fa_title);
         if (empty($fa_title)) return '';

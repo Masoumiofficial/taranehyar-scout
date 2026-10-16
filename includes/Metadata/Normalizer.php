@@ -22,12 +22,27 @@ class Normalizer {
         $title_fa_raw = isset($raw_data['title_fa']) ? trim($raw_data['title_fa']) : '';
         $title_en_raw = isset($raw_data['title_en']) ? trim($raw_data['title_en']) : '';
         
-        // اگر artist_fa انگلیسی است و lyricist فارسی داریم، از lyricist استفاده کن
+        // اگر artist_fa انگلیسی است، سعی کن از artist_fa موجود در credits یا raw_data فارسی استفاده کنی، نه lyricist (چون lyricist ممکن است آهنگساز باشد نه خواننده)
+        // فقط اگر artist_fa خالی یا انگلیسی است و artist_fa دیگری در raw_data داریم
         if (!empty($artist_fa_raw) && !preg_match('/[\x{0600}-\x{06FF}]/u', $artist_fa_raw)) {
+            // ابتدا بررسی کن آیا raw_data شامل artist_fa فارسی جدا است؟
+            if (!empty($raw_data['artist_fa']) && preg_match('/[\x{0600}-\x{06FF}]/u', $raw_data['artist_fa']) && $raw_data['artist_fa'] !== $artist_fa_raw) {
+                // این حالت نباید اتفاق بیفتد چون همین متغیر است، ولی برای اطمینان
+            }
+            // lyricist را فقط اگر artist_fa خالی بود استفاده کن، نه اگر انگلیسی بود
+            // چون در صفحه وحید حاجی تبار، lyricist=پیام قربانی و artist=وحید حاجی تبار است
+            // پس اینجا هیچ کاری نمی‌کنیم - اجازه می‌دهیم Provider درست استخراج کند
+            // فقط لاگ برای دیباگ
+        }
+        // اگر artist_fa خالی است، از lyricist فارسی به عنوان آخرین راه حل استفاده کن
+        if (empty($artist_fa_raw)) {
             if (!empty($raw_data['lyricist']) && preg_match('/[\x{0600}-\x{06FF}]/u', $raw_data['lyricist'])) {
                 $artist_fa_raw = trim($raw_data['lyricist']);
             } elseif (!empty($raw_data['credits']['lyricist']) && preg_match('/[\x{0600}-\x{06FF}]/u', $raw_data['credits']['lyricist'])) {
                 $artist_fa_raw = trim($raw_data['credits']['lyricist']);
+            } elseif (!empty($raw_data['composer']) && preg_match('/[\x{0600}-\x{06FF}]/u', $raw_data['composer'])) {
+                // composer هم می‌تواند fallback باشد
+                // ولی ترجیحاً نه
             }
         }
         
