@@ -23,14 +23,10 @@ class Publisher {
     
     public function preview($discovery_id) {
         $discovery = $this->get_discovery($discovery_id);
-        if (!$discovery) {
-            return new \WP_Error('not_found', 'اثر یافت نشد');
-        }
-        if ($discovery['license_status'] === 'forbidden') {
-            return new \WP_Error('forbidden', 'استفاده از این اثر مجاز نیست');
-        }
+        if (!$discovery) return new \WP_Error('not_found', 'اثر یافت نشد');
+        if ($discovery['license_status'] === 'forbidden') return new \WP_Error('forbidden', 'استفاده از این اثر مجاز نیست');
         $match_result = $this->matcher->match($discovery);
-        $preview = array(
+        return array(
             'discovery' => $discovery,
             'match' => $match_result,
             'post_data' => $this->build_post_data($discovery),
@@ -39,23 +35,15 @@ class Publisher {
             'can_publish' => $this->can_publish($discovery, $match_result),
             'warnings' => $this->get_warnings($discovery, $match_result),
         );
-        return $preview;
     }
     
     public function publish($payload, $job = null) {
         $discovery_id = isset($payload['discovery_id']) ? intval($payload['discovery_id']) : 0;
         $approved_by = isset($payload['approved_by']) ? intval($payload['approved_by']) : get_current_user_id();
         $publish_status = isset($payload['publish_status']) ? sanitize_text_field($payload['publish_status']) : 'draft';
-        
-        if (!$discovery_id) {
-            return new \WP_Error('invalid_id', 'شناسه اثر نامعتبر است');
-        }
-        
+        if (!$discovery_id) return new \WP_Error('invalid_id', 'شناسه اثر نامعتبر است');
         $discovery = $this->get_discovery($discovery_id);
-        if (!$discovery) {
-            return new \WP_Error('not_found', 'اثر یافت نشد');
-        }
-        
+        if (!$discovery) return new \WP_Error('not_found', 'اثر یافت نشد');
         $state_machine = new StateMachine();
         $state_machine->transition_to(StateMachine::STATE_VALIDATING);
         $validation = $this->validate_discovery($discovery);
@@ -64,7 +52,6 @@ class Publisher {
             $this->log_publish($discovery_id, 'failed', $validation->get_error_message());
             return $validation;
         }
-        
         $state_machine->transition_to(StateMachine::STATE_CHECKING_LICENSE);
         if ($discovery['license_status'] === 'forbidden') {
             $error = new \WP_Error('forbidden', 'استفاده از این اثر مجاز نیست');
@@ -72,7 +59,6 @@ class Publisher {
             $this->log_publish($discovery_id, 'failed', 'مجوز ندارد');
             return $error;
         }
-        
         if ($discovery['license_status'] === 'needs_review') {
             $license_approved = isset($payload['license_approved']) ? (bool) $payload['license_approved'] : false;
             if (!$license_approved) {
@@ -81,7 +67,6 @@ class Publisher {
                 return $error;
             }
         }
-        
         $state_machine->transition_to(StateMachine::STATE_CHECKING_DUPLICATE);
         $match_result = $this->matcher->match($discovery);
         if ($match_result['is_duplicate'] && $match_result['similarity'] >= 95) {
@@ -89,48 +74,31 @@ class Publisher {
             $state_machine->transition_to(StateMachine::STATE_FAILED, array('error' => $error->get_error_message()));
             return $error;
         }
-        
         $state_machine->transition_to(StateMachine::STATE_PREVIEW);
         $state_machine->transition_to(StateMachine::STATE_AWAITING_APPROVAL);
         $state_machine->transition_to(StateMachine::STATE_PREPARING_METADATA);
         $post_data = $this->build_post_data($discovery);
         $post_data['status'] = $publish_status;
-        
         $file_transferred = false;
         $transfer_data = array();
-        
         if ($this->should_transfer_file($discovery, $payload)) {
             $state_machine->transition_to(StateMachine::STATE_TRANSFERRING_FILE);
             $file_name = $this->build_file_name($discovery);
-            // استفاده از title_en برای نام فایل HostDL (سازگار با مسیر آرشیو ترانه‌یار)
             $transfer_title = !empty($discovery['title_en']) ? $discovery['title_en'] : $discovery['title'];
             $transfer_artist = !empty($discovery['artist_en']) ? $discovery['artist_en'] : $discovery['artist_fa'];
-            $transfer_data = $this->hostdl->build_music_transfer_data(
-                $discovery,
-                $transfer_artist,
-                $transfer_title,
-                $file_name
-            );
-            
+            $transfer_data = $this->hostdl->build_music_transfer_data($discovery, $transfer_artist, $transfer_title, $file_name);
             if (!empty($transfer_data['link320'])) {
                 $valid = $this->hostdl->validate_file($transfer_data['link320'], array('mp3'));
-                if (is_wp_error($valid)) {
-                    Logger::warning('File validation failed', array('url' => $transfer_data['link320'], 'error' => $valid->get_error_message()));
-                    $transfer_data['link320'] = '';
-                }
+                if (is_wp_error($valid)) { Logger::warning('File validation failed', array('url' => $transfer_data['link320'], 'error' => $valid->get_error_message())); $transfer_data['link320'] = ''; }
             }
             if (!empty($transfer_data['link128'])) {
                 $valid = $this->hostdl->validate_file($transfer_data['link128'], array('mp3'));
-                if (is_wp_error($valid)) {
-                    $transfer_data['link128'] = '';
-                }
+                if (is_wp_error($valid)) $transfer_data['link128'] = '';
             }
-            
             if ((!empty($transfer_data['link320']) || !empty($transfer_data['link128'])) && $this->hostdl->is_configured()) {
                 $transfer_result = $this->hostdl->transfer($transfer_data, 'music');
                 if (is_wp_error($transfer_result)) {
                     Logger::warning('File transfer failed, will use external URLs', array('discovery_id' => $discovery_id, 'error' => $transfer_result->get_error_message()));
-                    // حتی اگر انتقال ناموفق بود، URL خارجی را نگه دار اگر مجاز است
                 } else {
                     $file_transferred = true;
                     $state_machine->transition_to(StateMachine::STATE_VALIDATING_FILE);
@@ -141,7 +109,6 @@ class Publisher {
                 }
             }
         }
-        
         if (!$file_transferred) {
             $options = get_option('tscout_options', array());
             $allow_external = isset($options['allow_external_urls']) ? (bool) $options['allow_external_urls'] : true;
@@ -150,7 +117,6 @@ class Publisher {
                 $post_data['music128'] = isset($discovery['audio_url_128']) ? $discovery['audio_url_128'] : '';
             }
         }
-        
         $state_machine->transition_to(StateMachine::STATE_CREATING_POST);
         $existing_post = $this->adapter->post_exists_by_title($post_data['title']);
         if ($existing_post) {
@@ -158,14 +124,12 @@ class Publisher {
             $state_machine->transition_to(StateMachine::STATE_FAILED, array('error' => $error->get_error_message()));
             return $error;
         }
-        
         $post_id = $this->adapter->create_post($post_data);
         if (is_wp_error($post_id)) {
             $state_machine->transition_to(StateMachine::STATE_FAILED, array('error' => $post_id->get_error_message()));
             $this->log_publish($discovery_id, 'failed', $post_id->get_error_message());
             return $post_id;
         }
-        
         $state_machine->transition_to(StateMachine::STATE_FINAL_CHECK);
         $final_post = get_post($post_id);
         if (!$final_post) {
@@ -173,124 +137,91 @@ class Publisher {
             $state_machine->transition_to(StateMachine::STATE_FAILED, array('error' => $error->get_error_message()));
             return $error;
         }
-        
         $state_machine->transition_to(StateMachine::STATE_COMPLETED);
         global $wpdb;
-        $wpdb->update(
-            TSCOUT_TABLE_DISCOVERIES,
-            array(
-                'matched_post_id' => $post_id,
-                'match_status' => 'published',
-                'discovery_status' => 'published',
-                'updated_at' => current_time('mysql'),
-            ),
-            array('id' => $discovery_id)
-        );
-        
+        $wpdb->update(TSCOUT_TABLE_DISCOVERIES, array('matched_post_id' => $post_id,'match_status' => 'published','discovery_status' => 'published','updated_at' => current_time('mysql'),), array('id' => $discovery_id));
         $this->log_publish($discovery_id, 'completed', "پست #{$post_id} ایجاد شد", $post_id);
-        Logger::info('Discovery published', array(
-            'discovery_id' => $discovery_id,
-            'post_id' => $post_id,
-            'file_transferred' => $file_transferred,
-            'approved_by' => $approved_by
-        ));
-        
-        return array(
-            'post_id' => $post_id,
-            'post_url' => get_permalink($post_id),
-            'edit_url' => get_edit_post_link($post_id, ''),
-            'file_transferred' => $file_transferred,
-            'state_history' => $state_machine->get_history(),
-        );
+        Logger::info('Discovery published', array('discovery_id' => $discovery_id,'post_id' => $post_id,'file_transferred' => $file_transferred,'approved_by' => $approved_by));
+        return array('post_id' => $post_id,'post_url' => get_permalink($post_id),'edit_url' => get_edit_post_link($post_id, ''),'file_transferred' => $file_transferred,'state_history' => $state_machine->get_history(),);
     }
     
     private function validate_discovery($discovery) {
-        if (empty($discovery['title'])) {
-            return new \WP_Error('empty_title', 'عنوان اثر خالی است');
-        }
-        if (empty($discovery['artist_en']) && empty($discovery['artist_fa'])) {
-            return new \WP_Error('empty_artist', 'نام هنرمند خالی است');
-        }
-        if (empty($discovery['source_url'])) {
-            return new \WP_Error('empty_source', 'آدرس منبع خالی است');
-        }
+        if (empty($discovery['title'])) return new \WP_Error('empty_title', 'عنوان اثر خالی است');
+        if (empty($discovery['artist_en']) && empty($discovery['artist_fa'])) return new \WP_Error('empty_artist', 'نام هنرمند خالی است');
+        if (empty($discovery['source_url'])) return new \WP_Error('empty_source', 'آدرس منبع خالی است');
         $valid = UrlValidator::validate($discovery['source_url']);
         if (is_wp_error($valid)) return $valid;
         return true;
     }
     
     private function build_post_data($discovery) {
-        // استخراج نام‌های فارسی - اگر title_fa شامل نام خواننده باشد، جدا کن
         $artist_fa = !empty($discovery['artist_fa']) ? trim($discovery['artist_fa']) : '';
         $track_fa = !empty($discovery['title_fa']) ? trim($discovery['title_fa']) : '';
+        $artist_en = !empty($discovery['artist_en']) ? trim($discovery['artist_en']) : '';
+        $track_en = !empty($discovery['title_en']) ? trim($discovery['title_en']) : '';
         
-        // اگر artist_fa خالی است ولی artist_en داریم، از artist_en استفاده کن (fallback)
-        if (empty($artist_fa)) {
-            $artist_fa = !empty($discovery['artist_en']) ? $discovery['artist_en'] : '';
-        }
-        
-        // اگر track_fa خالی است، از title استفاده کن
-        if (empty($track_fa)) {
-            $track_fa = !empty($discovery['title']) ? $discovery['title'] : '';
-        }
-        
-        // اگر track_fa هنوز شامل artist_fa است (مثل "محسن یگانه تو خوب" که شامل "محسن یگانه" است)، جدا کن
-        if (!empty($artist_fa) && !empty($track_fa)) {
-            // بررسی دقیق: اگر track_fa با artist_fa شروع می‌شود
-            if (mb_strpos($track_fa, $artist_fa) === 0) {
-                $remaining = trim(mb_substr($track_fa, mb_strlen($artist_fa)));
-                if (!empty($remaining)) {
-                    $track_fa = $remaining;
-                }
-            }
-            // همچنین بررسی بدون فاصله اضافی
-            $artist_fa_normalized = preg_replace('/\s+/', ' ', $artist_fa);
-            $track_fa_normalized = preg_replace('/\s+/', ' ', $track_fa);
-            if (mb_strpos($track_fa_normalized, $artist_fa_normalized) === 0) {
-                $remaining = trim(mb_substr($track_fa_normalized, mb_strlen($artist_fa_normalized)));
-                if (!empty($remaining)) {
-                    $track_fa = $remaining;
-                }
-            }
-        }
-        
-        // اگر هنوز track_fa خالی است، fallback به title
-        if (empty($track_fa)) {
-            $track_fa = $discovery['title'];
-        }
-        
-        // عنوان نهایی باید "دانلود آهنگ {artist_fa} به نام {track_fa}" باشد
-        $title = "دانلود آهنگ {$artist_fa} به نام {$track_fa}";
-        
-        // تلاش برای استفاده از قالب SEO ترانه‌یار 1.0.6 اگر موجود است
-        if (class_exists('TaranehYar_SEO')) {
-            try {
-                $seo = \TaranehYar_SEO::profile('music', array(
-                    'artist' => $artist_fa,
-                    'track' => $track_fa,
-                    'artist_en' => $discovery['artist_en'],
-                    'track_en' => $discovery['title'],
-                    'site' => get_bloginfo('name'),
-                ));
-                if (!empty($seo['post_title'])) {
-                    // اگر قالب SEO شامل {artist} و {track} است، باید درست باشد
-                    // اما اگر شامل کل عنوان قبلی است، از عنوان خودمان استفاده کن
-                    // بررسی: اگر seo title شامل artist_fa و track_fa باشد، قبول کن
-                    if (mb_strpos($seo['post_title'], $artist_fa) !== false && mb_strpos($seo['post_title'], $track_fa) !== false) {
-                        $title = $seo['post_title'];
-                    } else {
-                        // اگر قالب SEO خالی یا ناقص است، از عنوان خودمان استفاده کن
-                        // اما اگر تنظیمات SEO عنوان را دارد، آن را ترجیح بده
+        // اگر artist_fa انگلیسی است (بدون فارسی) و در metadata_json فارسی داریم، از آن استفاده کن
+        if (!empty($artist_fa) && !preg_match('/[\x{0600}-\x{06FF}]/u', $artist_fa)) {
+            if (!empty($discovery['metadata_json'])) {
+                $meta = json_decode($discovery['metadata_json'], true);
+                if (is_array($meta)) {
+                    if (!empty($meta['artist_fa']) && preg_match('/[\x{0600}-\x{06FF}]/u', $meta['artist_fa'])) {
+                        $artist_fa = trim($meta['artist_fa']);
+                    } elseif (!empty($meta['lyricist']) && preg_match('/[\x{0600}-\x{06FF}]/u', $meta['lyricist'])) {
+                        $artist_fa = trim($meta['lyricist']);
+                    } elseif (!empty($meta['credits']['lyricist']) && preg_match('/[\x{0600}-\x{06FF}]/u', $meta['credits']['lyricist'])) {
+                        $artist_fa = trim($meta['credits']['lyricist']);
                     }
                 }
-            } catch (\Exception $e) {
-                // در صورت خطا، از عنوان خودمان استفاده کن
             }
         }
         
-        $content = $this->build_content($discovery, $artist_fa, $track_fa);
+        $track_fa = $this->clean_track_fa($track_fa, $artist_fa);
+        $artist_fa = $this->clean_artist_fa($artist_fa);
         
-        // استخراج متن ترانه از metadata_json یا lyrics
+        // اگر هنوز artist_fa انگلیسی است، سعی کن از title_fa اصلی استخراج کنی
+        if (!empty($artist_fa) && !preg_match('/[\x{0600}-\x{06FF}]/u', $artist_fa) && !empty($discovery['title_fa'])) {
+            $orig_fa = trim($discovery['title_fa']);
+            // اگر orig شامل فارسی + انگلیسی نیست، شاید خودش شامل نام خواننده فارسی باشد
+            if (preg_match('/^([\x{0600}-\x{06FF}\s]+)\s+([\x{0600}-\x{06FF}\s]+)$/u', $orig_fa, $m)) {
+                // دو بخش فارسی: احتمالاً اولی نام خواننده، دومی نام آهنگ
+                $maybe_artist = trim($m[1]);
+                $maybe_track = trim($m[2]);
+                if (mb_strlen($maybe_artist) <= 30 && mb_strlen($maybe_track) <= 60) {
+                    // اگر maybe_artist کوتاه است، احتمالاً نام خواننده است
+                    $artist_fa = $maybe_artist;
+                    $track_fa = $maybe_track;
+                }
+            }
+        }
+        
+        if (empty($artist_fa)) $artist_fa = !empty($artist_en) ? $artist_en : 'هنرمند';
+        if (empty($track_fa)) $track_fa = !empty($discovery['title']) ? $this->clean_track_fa($discovery['title'], $artist_fa) : 'آهنگ جدید';
+        
+        // اگر track_fa هنوز شامل artist_fa فارسی است، جدا کن - مثل "محسن یگانه زندگیم سوخت"
+        if (!empty($artist_fa) && !empty($track_fa) && preg_match('/[\x{0600}-\x{06FF}]/u', $artist_fa)) {
+            if (mb_strpos($track_fa, $artist_fa) === 0) {
+                $remaining = trim(mb_substr($track_fa, mb_strlen($artist_fa)));
+                $remaining = ltrim($remaining, " -–—");
+                if (!empty($remaining)) $track_fa = $remaining;
+            }
+            if (mb_strpos($track_fa, $artist_fa . ' ') === 0) {
+                $remaining = trim(mb_substr($track_fa, mb_strlen($artist_fa)));
+                $remaining = ltrim($remaining, " -–—");
+                if (!empty($remaining) && mb_strlen($remaining) < 100) $track_fa = $remaining;
+            }
+            if (mb_strpos($track_fa, ' از ') !== false) {
+                $parts = explode(' از ', $track_fa);
+                $first = trim($parts[0]);
+                if (!empty($first) && mb_strlen($first) < 100) $track_fa = $first;
+            }
+        }
+        
+        $track_fa = $this->clean_track_fa($track_fa, $artist_fa);
+        if (empty($track_fa)) $track_fa = 'آهنگ جدید';
+        
+        $title = "دانلود آهنگ {$artist_fa} به نام {$track_fa}";
+        
         $lyrics = '';
         if (!empty($discovery['metadata_json'])) {
             $meta = json_decode($discovery['metadata_json'], true);
@@ -299,29 +230,34 @@ class Publisher {
                 elseif (!empty($meta['music_text'])) $lyrics = $meta['music_text'];
             }
         }
-        // fallback به ستون‌های مستقیم اگر وجود دارد
-        if (empty($lyrics) && isset($discovery['lyrics'])) {
-            $lyrics = $discovery['lyrics'];
-        }
-        
-        // برای سازگاری با ستون‌های جدید اگر اضافه شده باشد
+        if (empty($lyrics) && isset($discovery['lyrics'])) $lyrics = $discovery['lyrics'];
         global $wpdb;
         $has_lyrics_col = $wpdb->get_var("SHOW COLUMNS FROM " . TSCOUT_TABLE_DISCOVERIES . " LIKE 'lyrics'");
-        if ($has_lyrics_col && !empty($discovery['lyrics'])) {
-            $lyrics = $discovery['lyrics'];
+        if ($has_lyrics_col && !empty($discovery['lyrics'])) $lyrics = $discovery['lyrics'];
+        $lyrics = $this->format_lyrics_verses($lyrics);
+        
+        if (empty($track_en)) {
+            $track_en = !empty($discovery['title']) ? $discovery['title'] : '';
+            if (!empty($artist_en) && stripos($track_en, $artist_en) === 0) {
+                $track_en = trim(substr($track_en, strlen($artist_en)));
+                $track_en = ltrim($track_en, " -–—");
+            }
         }
+        if (empty($artist_en)) $artist_en = $artist_fa;
+        
+        $content = $this->build_content($discovery, $artist_fa, $track_fa, $artist_en, $track_en);
         
         return array(
             'title' => $title,
             'artist_fa' => $artist_fa,
             'track_fa' => $track_fa,
-            'artist_en' => $discovery['artist_en'],
-            'track_en' => !empty($discovery['title_en']) ? $discovery['title_en'] : $discovery['title'],
-            'slug' => !empty($discovery['slug']) ? $discovery['slug'] : sanitize_title($discovery['artist_en'] . '-' . $discovery['title']),
+            'artist_en' => $artist_en,
+            'track_en' => !empty($track_en) ? $track_en : $discovery['title'],
+            'slug' => !empty($discovery['slug']) ? $discovery['slug'] : sanitize_title($artist_en . '-' . $track_en),
             'content' => $content,
             'excerpt' => "دانلود آهنگ {$track_fa} از {$artist_fa}",
             'musics_type' => 'mp3',
-            'music_txt' => $lyrics, // متن ترانه
+            'music_txt' => $lyrics,
             'cover_url' => $discovery['cover_url'] ?? '',
             'music128' => $discovery['audio_url_128'] ?? '',
             'music320' => $discovery['audio_url_320'] ?? '',
@@ -339,30 +275,131 @@ class Publisher {
         );
     }
     
-    private function build_content($discovery, $artist_fa, $track_fa) {
-        $content = "<p>دانلود آهنگ جدید <strong>{$artist_fa}</strong> به نام <strong>{$track_fa}</strong> با کیفیت 320 و 128.</p>";
-        
-        if (!empty($discovery['genre'])) {
-            $content .= "<p>سبک: {$discovery['genre']}</p>";
+    private function clean_artist_fa($artist_fa) {
+        $artist_fa = trim($artist_fa);
+        if (empty($artist_fa)) return '';
+        $artist_fa = preg_replace('/^دانلود آهنگ\s+/u', '', $artist_fa);
+        $artist_fa = trim($artist_fa);
+        return $artist_fa;
+    }
+    
+    private function clean_track_fa($track_fa, $artist_fa = '') {
+        $track_fa = trim($track_fa);
+        if (empty($track_fa)) return '';
+        $prefixes = array('دانلود آهنگ جدید ', 'دانلود آهنگ ', 'دانلود ');
+        foreach ($prefixes as $pre) {
+            if (mb_strpos($track_fa, $pre) === 0) {
+                $track_fa = trim(mb_substr($track_fa, mb_strlen($pre)));
+                break;
+            }
         }
-        if (!empty($discovery['year'])) {
-            $content .= "<p>سال انتشار: {$discovery['year']}</p>";
+        if (!empty($artist_fa) && mb_strpos($track_fa, ' از ') !== false && mb_strpos($track_fa, $artist_fa) !== false) {
+            $parts = explode(' از ', $track_fa);
+            $track_fa = trim($parts[0]);
         }
-        
-        // متن ترانه در محتوا نمایش داده نشود - فقط در متا ذخیره می‌شود (طبق تغییرات 1.0.6 ترانه‌یار)
-        // اما برای سازگاری، اگر قالب قدیمی است، می‌توان نمایش داد
-        
-        $content .= "<p><small>منبع: <a href=\"" . esc_url($discovery['source_url']) . "\" target=\"_blank\" rel=\"noopener\">" . esc_html($discovery['provider']) . "</a></small></p>";
+        if (!empty($artist_fa) && mb_strpos($track_fa, $artist_fa) === 0) {
+            $rem = trim(mb_substr($track_fa, mb_strlen($artist_fa)));
+            $rem = ltrim($rem, " -–—");
+            if (!empty($rem)) $track_fa = $rem;
+        }
+        if (!empty($artist_fa) && mb_strpos($track_fa, $artist_fa . ' ') === 0) {
+            $rem = trim(mb_substr($track_fa, mb_strlen($artist_fa)));
+            $rem = ltrim($rem, " -–—");
+            if (!empty($rem) && mb_strlen($rem) < 100) $track_fa = $rem;
+        }
+        foreach ($prefixes as $pre) {
+            if (mb_strpos($track_fa, $pre) === 0) {
+                $track_fa = trim(mb_substr($track_fa, mb_strlen($pre)));
+                break;
+            }
+        }
+        $track_fa = trim($track_fa, " -–—");
+        $track_fa = preg_replace('/\s+/', ' ', $track_fa);
+        return $track_fa;
+    }
+    
+    private function format_lyrics_verses($lyrics) {
+        $lyrics = trim($lyrics);
+        if (empty($lyrics)) return '';
+        $lyrics = str_replace(array("\r\n", "\r"), "\n", $lyrics);
+        $lines = explode("\n", $lyrics);
+        $formatted = array();
+        foreach ($lines as $line) {
+            $line = trim($line);
+            if ($line === '') { if (!empty($formatted) && end($formatted) !== '') $formatted[] = ''; continue; }
+            if (mb_strpos($line, 'دانلود آهنگ با کیفیت') !== false) continue;
+            if (mb_strpos($line, 'پخش آهنگ') !== false && mb_strlen($line) < 30) continue;
+            $formatted[] = $line;
+        }
+        $text = implode("\n", $formatted);
+        $text = preg_replace("/\n{3,}/", "\n\n", $text);
+        $text = trim($text);
+        if (mb_strlen($text) > 10000) $text = mb_substr($text, 0, 10000);
+        return $text;
+    }
+    
+    private function build_content($discovery, $artist_fa, $track_fa, $artist_en = '', $track_en = '') {
+        $home_url = function_exists('home_url') ? home_url('/') : 'https://rozmusic.com/';
+        $home_url = rtrim($home_url, '/') . '/';
+        $artist_fa_slug = str_replace(' ', '-', $artist_fa);
+        $artist_fa_tag_url = $home_url . 'tag/' . rawurlencode($artist_fa_slug);
+        $artist_en_for_url = !empty($artist_en) ? $artist_en : $artist_fa;
+        $artist_en_slug = str_replace(' ', '-', $artist_en_for_url);
+        $artist_en_slug = preg_replace('/[^A-Za-z0-9\-]/', '', $artist_en_slug);
+        if (empty($artist_en_slug)) $artist_en_slug = sanitize_title($artist_en_for_url);
+        $artist_en_tag_url = $home_url . 'tag/' . $artist_en_slug;
+        $content = '';
+        $content .= '<p><a href="' . esc_url($home_url) . '">دانلود آهنگ جدید</a> <strong><a href="' . esc_url($artist_fa_tag_url) . '">' . esc_html($artist_fa) . '</a></strong> به نام <strong>' . esc_html($track_fa) . '</strong></p>' . "\n\n";
+        $credits_text = $this->build_credits_text($discovery);
+        if (!empty($credits_text)) $content .= '<p>' . $credits_text . '</p>' . "\n\n";
+        if (!empty($artist_en) && !empty($track_en)) {
+            $track_en_clean = $track_en;
+            if (stripos($track_en_clean, $artist_en) === 0) {
+                $track_en_clean = trim(substr($track_en_clean, strlen($artist_en)));
+                $track_en_clean = ltrim($track_en_clean, " -–—");
+            }
+            if (empty($track_en_clean)) $track_en_clean = $track_en;
+            $content .= '<p>Download New Music <strong><a href="' . esc_url($artist_en_tag_url) . '">' . esc_html($artist_en) . '</a></strong> – <strong>' . esc_html($track_en_clean) . '</strong></p>';
+        }
         return $content;
+    }
+    
+    private function build_credits_text($discovery) {
+        $meta = array();
+        if (!empty($discovery['metadata_json'])) {
+            $decoded = json_decode($discovery['metadata_json'], true);
+            if (is_array($decoded)) $meta = $decoded;
+        }
+        $lyricist = isset($meta['lyricist']) ? $meta['lyricist'] : (isset($discovery['lyricist']) ? $discovery['lyricist'] : '');
+        $composer = isset($meta['composer']) ? $meta['composer'] : (isset($discovery['composer']) ? $discovery['composer'] : '');
+        $arranger = isset($meta['arranger']) ? $meta['arranger'] : (isset($discovery['arranger']) ? $discovery['arranger'] : '');
+        $mix_master = isset($meta['mix_master']) ? $meta['mix_master'] : '';
+        if (isset($meta['credits']) && is_array($meta['credits'])) {
+            $c = $meta['credits'];
+            if (empty($lyricist) && !empty($c['lyricist'])) $lyricist = $c['lyricist'];
+            if (empty($composer) && !empty($c['composer'])) $composer = $c['composer'];
+            if (empty($arranger) && !empty($c['arranger'])) $arranger = $c['arranger'];
+            if (empty($mix_master) && !empty($c['mix_master'])) $mix_master = $c['mix_master'];
+        }
+        if (empty($lyricist) && !empty($discovery['lyricist'])) $lyricist = $discovery['lyricist'];
+        if (empty($composer) && !empty($discovery['composer'])) $composer = $discovery['composer'];
+        if (empty($arranger) && !empty($discovery['arranger'])) $arranger = $discovery['arranger'];
+        $parts = array();
+        if (!empty($lyricist) && !empty($composer)) {
+            if (trim($lyricist) === trim($composer)) $parts[] = 'ترانه و موزیک: ' . esc_html($lyricist);
+            else $parts[] = 'ترانه: ' . esc_html($lyricist) . ', موزیک: ' . esc_html($composer);
+        } elseif (!empty($lyricist)) $parts[] = 'ترانه: ' . esc_html($lyricist);
+        elseif (!empty($composer)) $parts[] = 'موزیک: ' . esc_html($composer);
+        if (!empty($arranger)) $parts[] = 'تنظیم: ' . esc_html($arranger);
+        if (!empty($mix_master)) $parts[] = 'میکس و مستر: ' . esc_html($mix_master);
+        if (empty($parts)) return '';
+        return implode(', ', $parts);
     }
     
     private function build_file_name($discovery) {
         $artist = !empty($discovery['artist_en']) ? $discovery['artist_en'] : $discovery['artist_fa'];
         $track = !empty($discovery['title']) ? $discovery['title'] : $discovery['title_fa'];
-        // برای نام فایل، از انگلیسی استفاده کن اگر موجود است
-        if (!empty($discovery['title_en'])) {
-            $track = $discovery['title_en'];
-        }
+        if (!empty($discovery['title_en'])) $track = $discovery['title_en'];
         $file_name = $artist . ' - ' . $track;
         $file_name = str_replace(array('..', "\\", "\0"), '', $file_name);
         $file_name = preg_replace('#[/\\\\]+#', '-', $file_name);
@@ -383,16 +420,10 @@ class Publisher {
     }
     
     private function should_transfer_file($discovery, $payload = array()) {
-        if (in_array($discovery['license_status'], array('forbidden', 'metadata_only'), true)) {
-            return false;
-        }
-        // اگر مجوز needs_review است و کاربر تایید کرده، اجازه انتقال بده
+        if (in_array($discovery['license_status'], array('forbidden', 'metadata_only'), true)) return false;
         if ($discovery['license_status'] === 'needs_review') {
             $license_approved = isset($payload['license_approved']) ? (bool) $payload['license_approved'] : false;
-            if ($license_approved) {
-                // حتی اگر policy می‌گوید allow_audio_download=0، چون کاربر تایید کرده اجازه بده
-                return !empty($discovery['audio_url_128']) || !empty($discovery['audio_url_320']);
-            }
+            if ($license_approved) return !empty($discovery['audio_url_128']) || !empty($discovery['audio_url_320']);
             $options = get_option('tscout_options', array());
             $policies = isset($options['provider_policies'][$discovery['provider']]) ? $options['provider_policies'][$discovery['provider']] : array();
             $allow = isset($policies['allow_audio_download']) ? (bool) $policies['allow_audio_download'] : true;
@@ -405,45 +436,26 @@ class Publisher {
     private function can_publish($discovery, $match_result) {
         if ($discovery['license_status'] === 'forbidden') return false;
         if ($match_result['is_duplicate'] && $match_result['similarity'] >= 95) return false;
-        return true; // حتی اگر needs_review باشد، با تایید مجوز قابل انتشار است
+        return true;
     }
     
     private function get_warnings($discovery, $match_result) {
         $warnings = array();
-        if ($discovery['license_status'] === 'needs_review') {
-            $warnings[] = 'مجوز این اثر نیاز به بررسی دارد. قبل از انتشار، تیک تایید مجوز را بزنید.';
-        }
-        if ($discovery['license_status'] === 'metadata_only') {
-            $warnings[] = 'فقط متادیتای این اثر قابل استفاده است، نه فایل صوتی.';
-        }
-        if ($match_result['needs_review']) {
-            $warnings[] = 'این اثر نیاز به بررسی دستی دارد: ' . $match_result['reason'];
-        }
-        if (empty($discovery['audio_url_320']) && empty($discovery['audio_url_128'])) {
-            $warnings[] = 'فایل صوتی برای این اثر یافت نشد. فقط متادیتا منتشر خواهد شد.';
-        }
-        if (!$this->hostdl->is_configured()) {
-            $warnings[] = 'هاست دانلود پیکربندی نشده است. فایل‌ها به صورت URL خارجی ذخیره می‌شوند. تنظیمات ترانه‌یار را بررسی کنید: ' . $this->adapter->get_download_host();
-        }
-        if ($discovery['confidence'] < 50) {
-            $warnings[] = 'میزان اطمینان پایین است (' . $discovery['confidence'] . '%).';
-        }
+        if ($discovery['license_status'] === 'needs_review') $warnings[] = 'مجوز این اثر نیاز به بررسی دارد. قبل از انتشار، تیک تایید مجوز را بزنید.';
+        if ($discovery['license_status'] === 'metadata_only') $warnings[] = 'فقط متادیتای این اثر قابل استفاده است، نه فایل صوتی.';
+        if ($match_result['needs_review']) $warnings[] = 'این اثر نیاز به بررسی دستی دارد: ' . $match_result['reason'];
+        if (empty($discovery['audio_url_320']) && empty($discovery['audio_url_128'])) $warnings[] = 'فایل صوتی برای این اثر یافت نشد. فقط متادیتا منتشر خواهد شد.';
+        if (!$this->hostdl->is_configured()) $warnings[] = 'هاست دانلود پیکربندی نشده است. فایل‌ها به صورت URL خارجی ذخیره می‌شوند. تنظیمات ترانه‌یار را بررسی کنید: ' . $this->adapter->get_download_host();
+        if ($discovery['confidence'] < 50) $warnings[] = 'میزان اطمینان پایین است (' . $discovery['confidence'] . '%).';
         return $warnings;
     }
     
     private function get_discovery($id) {
         global $wpdb;
-        return $wpdb->get_row($wpdb->prepare(
-            "SELECT * FROM " . TSCOUT_TABLE_DISCOVERIES . " WHERE id = %d LIMIT 1",
-            intval($id)
-        ), ARRAY_A);
+        return $wpdb->get_row($wpdb->prepare("SELECT * FROM " . TSCOUT_TABLE_DISCOVERIES . " WHERE id = %d LIMIT 1", intval($id)), ARRAY_A);
     }
     
     private function log_publish($discovery_id, $status, $message, $post_id = null) {
-        Logger::info("Publish {$status}: {$message}", array(
-            'discovery_id' => $discovery_id,
-            'post_id' => $post_id,
-            'status' => $status
-        ));
+        Logger::info("Publish {$status}: {$message}", array('discovery_id' => $discovery_id,'post_id' => $post_id,'status' => $status));
     }
 }

@@ -11,24 +11,14 @@ class MyBia2MusicProvider implements ProviderInterface {
     const BASE_URL = 'https://www.mybia2music.com';
     const SEARCH_PATH = '/search/';
     
-    public function get_id() {
-        return 'mybia2music';
-    }
-    
-    public function get_name() {
-        return 'MyBia2Music';
-    }
-    
-    public function get_label() {
-        return 'بیا2موزیک';
-    }
+    public function get_id() { return 'mybia2music'; }
+    public function get_name() { return 'MyBia2Music'; }
+    public function get_label() { return 'بیا2موزیک'; }
     
     public function is_available() {
         $options = get_option('tscout_options', array());
         $policies = isset($options['provider_policies'][$this->get_id()]) ? $options['provider_policies'][$this->get_id()] : array();
-        if (!isset($policies['enabled'])) {
-            return true;
-        }
+        if (!isset($policies['enabled'])) return true;
         return (bool) $policies['enabled'];
     }
     
@@ -50,40 +40,28 @@ class MyBia2MusicProvider implements ProviderInterface {
         );
     }
     
-    public function validate_config() {
-        return true;
-    }
+    public function validate_config() { return true; }
     
     public function search_artist($artist_en, $options = array()) {
         $artist_en = trim((string) $artist_en);
-        if (empty($artist_en)) {
-            return new \WP_Error('empty_artist', 'نام هنرمند خالی است.');
-        }
-        
+        if (empty($artist_en)) return new \WP_Error('empty_artist', 'نام هنرمند خالی است.');
         $limit = isset($options['limit']) ? intval($options['limit']) : 50;
         $limit = max(1, min(100, $limit));
         $types = isset($options['types']) ? (array) $options['types'] : array();
-        
         Logger::info('Starting search for artist: ' . $artist_en, array('provider' => $this->get_id(), 'artist' => $artist_en, 'limit' => $limit));
-        
         $search_url = self::BASE_URL . self::SEARCH_PATH . urlencode($artist_en);
         $valid = UrlValidator::validate($search_url);
-        if (is_wp_error($valid)) {
-            return $valid;
-        }
-        
+        if (is_wp_error($valid)) return $valid;
         $response = $this->fetch_url($search_url);
         if (is_wp_error($response)) {
             $this->update_status(false, $response->get_error_message());
             return $response;
         }
-        
         $tracks = $this->parse_search_results($response, $artist_en, $limit, $types);
         if (is_wp_error($tracks)) {
             $this->update_status(false, $tracks->get_error_message());
             return $tracks;
         }
-        
         $this->update_status(true);
         Logger::info('Search completed', array('provider' => $this->get_id(), 'artist' => $artist_en, 'found' => count($tracks)));
         return $tracks;
@@ -92,16 +70,12 @@ class MyBia2MusicProvider implements ProviderInterface {
     public function get_track_details($source_url) {
         $source_url = trim((string) $source_url);
         $valid = UrlValidator::validate($source_url);
-        if (is_wp_error($valid)) {
-            return $valid;
-        }
+        if (is_wp_error($valid)) return $valid;
         if (!UrlValidator::is_allowed_provider_domain($source_url, $this->get_id())) {
             return new \WP_Error('invalid_domain', 'دامنه مجاز نیست.');
         }
         $response = $this->fetch_url($source_url);
-        if (is_wp_error($response)) {
-            return $response;
-        }
+        if (is_wp_error($response)) return $response;
         return $this->parse_track_page($response, $source_url);
     }
     
@@ -109,7 +83,6 @@ class MyBia2MusicProvider implements ProviderInterface {
         $options = get_option('tscout_options', array());
         $timeout = isset($options['request_timeout']) ? intval($options['request_timeout']) : 30;
         $timeout = max(10, min(60, $timeout));
-        
         $args = array(
             'timeout' => $timeout,
             'redirection' => 2,
@@ -120,35 +93,25 @@ class MyBia2MusicProvider implements ProviderInterface {
             ),
             'sslverify' => true,
         );
-        
         $last_request = get_transient('tscout_last_request_' . $this->get_id());
         if ($last_request) {
             $elapsed = time() - $last_request;
             $rate_limit = 2;
-            if ($elapsed < $rate_limit) {
-                sleep($rate_limit - $elapsed);
-            }
+            if ($elapsed < $rate_limit) sleep($rate_limit - $elapsed);
         }
-        
         $response = wp_remote_get($url, $args);
         set_transient('tscout_last_request_' . $this->get_id(), time(), 60);
-        
         if (is_wp_error($response)) {
             Logger::error('Failed to fetch URL: ' . $url, array('provider' => $this->get_id(), 'error' => $response->get_error_message()));
             return $response;
         }
-        
         $code = wp_remote_retrieve_response_code($response);
         if ($code !== 200) {
             Logger::warning('Non-200 response', array('provider' => $this->get_id(), 'url' => $url, 'code' => $code));
             return new \WP_Error('http_error', "خطای HTTP {$code} برای آدرس {$url}");
         }
-        
         $body = wp_remote_retrieve_body($response);
-        if (empty($body)) {
-            return new \WP_Error('empty_body', 'پاسخ خالی از سرور');
-        }
-        
+        if (empty($body)) return new \WP_Error('empty_body', 'پاسخ خالی از سرور');
         return $body;
     }
     
@@ -169,11 +132,8 @@ class MyBia2MusicProvider implements ProviderInterface {
         foreach ($links as $link) {
             if ($count >= $limit) break;
             $href = $link->getAttribute('href');
-            if (strpos($href, '//') === 0) {
-                $href = 'https:' . $href;
-            } elseif (strpos($href, '/') === 0) {
-                $href = self::BASE_URL . $href;
-            }
+            if (strpos($href, '//') === 0) $href = 'https:' . $href;
+            elseif (strpos($href, '/') === 0) $href = self::BASE_URL . $href;
             if (!preg_match('#https?://(?:www\.)?mybia2music\.com/(\d+)/([a-z0-9\-]+)#i', $href, $matches)) continue;
             $external_id = $matches[1];
             $slug = $matches[2];
@@ -206,6 +166,7 @@ class MyBia2MusicProvider implements ProviderInterface {
             if ($i < $enrich_limit) {
                 $details = $this->get_track_details($tracks[$i]['source_url']);
                 if (!is_wp_error($details)) {
+                    if (empty($details['artist_en']) && !empty($artist_en)) $details['artist_en'] = $artist_en;
                     $enriched[] = array_merge($tracks[$i], $details);
                 } else {
                     $enriched[] = $tracks[$i];
@@ -235,42 +196,64 @@ class MyBia2MusicProvider implements ProviderInterface {
             $details['page_title'] = trim($title_nodes->item(0)->textContent);
         }
         
-        // استخراج نام فارسی خواننده از لینک هنرمند
+        // استخراج هنرمند فارسی و اسلاگ انگلیسی
         $artist_fa = '';
+        $artist_slug_en = '';
         $artist_links = $xpath->query('//a[contains(@href, "/artists/")]');
         if ($artist_links->length > 0) {
             foreach ($artist_links as $alink) {
                 $text = trim($alink->textContent);
-                if (!empty($text) && mb_strlen($text) > 1 && mb_strlen($text) < 100) {
-                    $href = $alink->getAttribute('href');
-                    if (preg_match('#/artists/[^/]+$#', $href)) {
-                        $artist_fa = $text;
-                        break;
+                $href = $alink->getAttribute('href');
+                if (preg_match('#/artists/([a-z0-9\-]+)#i', $href, $m)) {
+                    $slug_candidate = strtolower($m[1]);
+                    if (!empty($text) && mb_strlen($text) > 1 && mb_strlen($text) < 100) {
+                        if (preg_match('/[\x{0600}-\x{06FF}]/u', $text)) {
+                            $artist_fa = $text;
+                            $artist_slug_en = $slug_candidate;
+                            break;
+                        }
+                        if (empty($artist_fa) && empty($artist_slug_en)) {
+                            $artist_slug_en = $slug_candidate;
+                        }
                     }
                 }
             }
         }
-        if (!empty($artist_fa)) {
-            $details['artist_fa'] = $artist_fa;
+        if (!empty($artist_fa)) $details['artist_fa'] = $artist_fa;
+        if (!empty($artist_slug_en)) {
+            $details['artist_slug_en'] = $artist_slug_en;
+            $details['artist_en'] = $this->slug_to_en_name($artist_slug_en);
+        }
+        
+        // اسلاگ آهنگ از URL
+        $track_slug_full = '';
+        if (preg_match('#/(\d+)/([a-z0-9\-]+)#i', $source_url, $sm)) {
+            $track_slug_full = strtolower($sm[2]);
+            $details['track_slug_full'] = $track_slug_full;
+        }
+        
+        $track_en_from_slug = '';
+        $track_slug_en = $track_slug_full;
+        if (!empty($artist_slug_en) && !empty($track_slug_full) && strpos($track_slug_full, $artist_slug_en . '-') === 0) {
+            $track_slug_en = substr($track_slug_full, strlen($artist_slug_en) + 1);
+        }
+        if (!empty($track_slug_en)) {
+            $track_en_from_slug = $this->slug_to_en_name($track_slug_en);
+            $details['title_en'] = $track_en_from_slug;
+            $details['track_en_from_slug'] = $track_en_from_slug;
         }
         
         // کاور
         $cover = '';
         $og_image = $xpath->query('//meta[@property="og:image"]/@content');
-        if ($og_image->length > 0) {
-            $cover = $og_image->item(0)->nodeValue;
-        }
-        if (preg_match('#https?://sv\d*\.mybia2music\.com/[^\s"\'<>]+\.jpg#i', $html, $m)) {
-            $cover = html_entity_decode($m[0]);
-        }
+        if ($og_image->length > 0) $cover = $og_image->item(0)->nodeValue;
+        if (preg_match('#https?://sv\d*\.mybia2music\.com/[^\s"\'<>]+\.jpg#i', $html, $m)) $cover = html_entity_decode($m[0]);
         if (empty($cover)) {
             $images = $xpath->query('//img[contains(@src, "mybia2music.com")]/@src');
             foreach ($images as $img) {
                 $src = $img->nodeValue;
                 if (strpos($src, 'data:image') === 0) continue;
-                if (filter_var($src, FILTER_VALIDATE_URL) && strpos($src, 'thumbs') === false) {
-                    $cover = $src; break;
-                }
+                if (filter_var($src, FILTER_VALIDATE_URL) && strpos($src, 'thumbs') === false) { $cover = $src; break; }
             }
             if (empty($cover)) {
                 $images = $xpath->query('//img[contains(@src, "mybia2music")]/@src');
@@ -316,60 +299,198 @@ class MyBia2MusicProvider implements ProviderInterface {
         if ($mood_nodes->length > 0) $mood = trim($mood_nodes->item(0)->textContent);
         $details['mood'] = $mood;
         
-        // عنوان فارسی - h1 معمولاً "محسن یگانه تو خوب"
-        $title_fa_full = '';
-        $h1_nodes = $xpath->query('//h1');
-        if ($h1_nodes->length > 0) $title_fa_full = trim($h1_nodes->item(0)->textContent);
-        
-        $title_fa = $title_fa_full;
-        if (!empty($artist_fa) && !empty($title_fa_full)) {
-            if (mb_strpos($title_fa_full, $artist_fa) === 0) {
-                $track = trim(mb_substr($title_fa_full, mb_strlen($artist_fa)));
-                if (!empty($track)) $title_fa = $track;
-            }
+        // اعتبارات
+        $plain_text = html_entity_decode(strip_tags($html));
+        $plain_text = preg_replace('/\s+/', ' ', $plain_text);
+        $credits = array();
+        if (preg_match('/ترانه\s*سرا\s*:\s*([^\n]+?)\s*(?:آهنگساز|تنظیم|میکس|سبک|حال|$)/u', $plain_text, $m)) $credits['lyricist'] = trim($m[1]);
+        if (preg_match('/آهنگساز\s*:\s*([^\n]+?)\s*(?:تنظیم|میکس|سبک|حال|$)/u', $plain_text, $m)) $credits['composer'] = trim($m[1]);
+        if (preg_match('/تنظیم\s*کننده\s*:\s*([^\n]+?)\s*(?:میکس|سبک|حال|$)/u', $plain_text, $m)) $credits['arranger'] = trim($m[1]);
+        if (preg_match('/میکس\s*و\s*مستر\s*:\s*([^\n]+?)\s*(?:سبک|حال|$)/u', $plain_text, $m)) $credits['mix_master'] = trim($m[1]);
+        foreach ($credits as $k => $v) {
+            $v = preg_replace('/\s+/', ' ', $v);
+            $v = trim($v, " \t\n\r\0\x0B-–—");
+            $v = str_replace('بیاتوموزیک', '', $v);
+            $v = trim($v);
+            if (mb_strlen($v) > 100) $v = mb_substr($v, 0, 100);
+            $credits[$k] = $v;
         }
+        $details['credits'] = $credits;
+        $details['lyricist'] = isset($credits['lyricist']) ? $credits['lyricist'] : '';
+        $details['composer'] = isset($credits['composer']) ? $credits['composer'] : '';
+        $details['arranger'] = isset($credits['arranger']) ? $credits['arranger'] : '';
+        $details['mix_master'] = isset($credits['mix_master']) ? $credits['mix_master'] : '';
+        
+        // اگر artist_fa خالی است ولی lyricist فارسی داریم، از آن استفاده کن (برای جلوگیری از انگلیسی شدن)
+        if (empty($artist_fa) && !empty($credits['lyricist']) && preg_match('/[\x{0600}-\x{06FF}]/u', $credits['lyricist'])) {
+            $artist_fa = $credits['lyricist'];
+            $details['artist_fa'] = $artist_fa;
+        }
+        
+        // عنوان فارسی و انگلیسی از page_title
+        $title_fa = '';
+        $title_en = $track_en_from_slug;
         
         if (isset($details['page_title'])) {
-            $page_title = $details['page_title'];
-            if (preg_match('/^(.+?)\s+([A-Za-z][A-Za-z0-9\s\-]+)$/u', $page_title, $tm)) {
+            $page_title = trim($details['page_title']);
+            // حالت 1: "دانلود آهنگ محسن یگانه بترس Mohsen Yeganeh Betars" یا "محسن یگانه زندگیم سوخت Mohsen Yeganeh Zendegim Sookht"
+            if (preg_match('/^(.+?[\x{0600}-\x{06FF}].*?)\s+([A-Za-z][A-Za-z0-9\s\-]+)$/u', $page_title, $tm)) {
                 $fa_part = trim($tm[1]);
                 $en_part = trim($tm[2]);
-                if (!empty($artist_fa) && mb_strpos($fa_part, $artist_fa) === 0) {
-                    $fa_track = trim(mb_substr($fa_part, mb_strlen($artist_fa)));
-                    $details['title_fa'] = !empty($fa_track) ? $fa_track : $fa_part;
-                } else {
-                    if (empty($title_fa) || $title_fa === $title_fa_full) $details['title_fa'] = $fa_part;
-                }
-                $details['title_en'] = $en_part;
+                $fa_part = $this->clean_fa_title($fa_part, $artist_fa);
+                if (!empty($fa_part)) $title_fa = $fa_part;
+                $en_part_clean = $this->clean_en_title($en_part, isset($details['artist_en']) ? $details['artist_en'] : '');
+                if (!empty($en_part_clean)) $title_en = $en_part_clean;
+                else $title_en = $track_en_from_slug;
+            } else {
+                $fa_clean = $this->clean_fa_title($page_title, $artist_fa);
+                if (!empty($fa_clean)) $title_fa = $fa_clean;
             }
         }
         
-        if (empty($details['title_fa']) && !empty($title_fa)) $details['title_fa'] = $title_fa;
-        if (empty($details['title_fa']) && !empty($title_fa_full)) $details['title_fa'] = $title_fa_full;
+        if (empty($title_fa)) {
+            $h1_nodes = $xpath->query('//h1');
+            if ($h1_nodes->length > 0) {
+                $h1_text = trim($h1_nodes->item(0)->textContent);
+                $h1_clean = $this->clean_fa_title($h1_text, $artist_fa);
+                if (!empty($h1_clean)) $title_fa = $h1_clean;
+                else $title_fa = $h1_text;
+            }
+        }
         
-        // متن ترانه - بهبود یافته
+        if (!empty($title_fa)) $details['title_fa'] = $title_fa;
+        if (!empty($title_en)) $details['title_en'] = $title_en;
+        
+        // اگر هنوز title_fa شامل نام خواننده است و artist_fa داریم، دوباره تمیز کن
+        if (!empty($details['title_fa']) && !empty($artist_fa)) {
+            $details['title_fa'] = $this->clean_fa_title($details['title_fa'], $artist_fa);
+        }
+        
+        $lyrics = $this->extract_lyrics($dom, $xpath, $html);
+        $details['lyrics'] = $lyrics;
+        $details['music_text'] = $lyrics;
+        
+        return $details;
+    }
+    
+    private function clean_fa_title($fa_title, $artist_fa) {
+        $fa_title = trim($fa_title);
+        if (empty($fa_title)) return '';
+        $prefixes = array('دانلود آهنگ جدید ', 'دانلود آهنگ ', 'دانلود ');
+        foreach ($prefixes as $pre) {
+            if (mb_strpos($fa_title, $pre) === 0) {
+                $fa_title = trim(mb_substr($fa_title, mb_strlen($pre)));
+                break;
+            }
+        }
+        // "بترس از محسن یگانه" یا "زندگیم سوخت از محسن یگانه"
+        if (mb_strpos($fa_title, ' از ') !== false) {
+            $parts = explode(' از ', $fa_title);
+            $first = trim($parts[0]);
+            if (!empty($first) && mb_strlen($first) < 100) {
+                if (!empty($artist_fa) && mb_strpos($fa_title, $artist_fa) !== false) {
+                    $fa_title = $first;
+                } else {
+                    // اگر بخش دوم شبیه نام خواننده است (حداقل 2 کلمه فارسی)، بخش اول را به عنوان ترک بگیر
+                    $second = trim($parts[1] ?? '');
+                    if (!empty($second) && preg_match('/[\x{0600}-\x{06FF}]/u', $second) && mb_strlen($second) < 50) {
+                        // احتمالاً "از محسن یگانه" است
+                        $fa_title = $first;
+                    }
+                }
+            }
+        }
+        if (!empty($artist_fa)) {
+            if (mb_strpos($fa_title, $artist_fa) === 0) {
+                $remaining = trim(mb_substr($fa_title, mb_strlen($artist_fa)));
+                $remaining = ltrim($remaining, " -–—");
+                if (!empty($remaining)) $fa_title = $remaining;
+            }
+            // "محسن یگانه - زندگیم سوخت"
+            if (mb_strpos($fa_title, $artist_fa . ' -') === 0 || mb_strpos($fa_title, $artist_fa . ' –') === 0) {
+                $fa_title = trim(str_replace($artist_fa, '', $fa_title));
+                $fa_title = ltrim($fa_title, " -–—");
+            }
+            // اگر عنوان شامل "محسن یگانه زندگیم سوخت" است و artist_fa = "محسن یگانه"، حذف کن
+            if (mb_strpos($fa_title, $artist_fa . ' ') === 0) {
+                $remaining = trim(mb_substr($fa_title, mb_strlen($artist_fa)));
+                if (!empty($remaining) && mb_strlen($remaining) < 100) {
+                    $fa_title = $remaining;
+                }
+            }
+        }
+        foreach ($prefixes as $pre) {
+            if (mb_strpos($fa_title, $pre) === 0) {
+                $fa_title = trim(mb_substr($fa_title, mb_strlen($pre)));
+                break;
+            }
+        }
+        $fa_title = trim($fa_title, " -–—");
+        $fa_title = preg_replace('/\s+/', ' ', $fa_title);
+        return $fa_title;
+    }
+    
+    private function clean_en_title($en_title, $artist_en) {
+        $en_title = trim($en_title);
+        if (empty($en_title)) return '';
+        if (!empty($artist_en)) {
+            if (stripos($en_title, $artist_en) === 0) {
+                $remaining = trim(substr($en_title, strlen($artist_en)));
+                $remaining = ltrim($remaining, " -–—");
+                if (!empty($remaining)) $en_title = $remaining;
+            }
+        }
+        $en_title = trim($en_title, " -–—");
+        return $en_title;
+    }
+    
+    private function slug_to_en_name($slug) {
+        $slug = strtolower(trim($slug));
+        $slug = str_replace('-', ' ', $slug);
+        $slug = preg_replace('/\s+/', ' ', $slug);
+        $slug = trim($slug);
+        $words = explode(' ', $slug);
+        $words = array_map(function($w) { return ucfirst($w); }, $words);
+        return implode(' ', $words);
+    }
+    
+    private function extract_lyrics($dom, $xpath, $html) {
         $lyrics = '';
-        $lyric_nodes = $xpath->query('//*[contains(@id, "lyric") or contains(@class, "lyric") or contains(@class, "lyrics")]');
+        $lyric_nodes = $xpath->query('//*[@id="lyric" or contains(@id, "lyric")]');
         if ($lyric_nodes->length > 0) {
             foreach ($lyric_nodes as $ln) {
-                $text = trim($ln->textContent);
+                $inner = $dom->saveHTML($ln);
+                $text = $this->html_to_lyrics_text($inner);
                 if (mb_strlen($text) > 20) { $lyrics = $text; break; }
             }
         }
         if (empty($lyrics) || mb_strlen($lyrics) < 20) {
-            $patterns = array(
-                '/متن آهنگ.*?[\r\n]+(.+?)[\r\n]+.*?(?:پخش آهنگ|دانلود آهنگ با کیفیت)/su',
-                '/متن ترانه.*?[\r\n]+(.+?)[\r\n]+.*?(?:پخش|دانلود)/su',
-                '/<div[^>]*class="[^\"]*lyric[^\"]*"[^>]*>(.+?)<\/div>/su',
-            );
-            foreach ($patterns as $pat) {
-                if (preg_match($pat, $html, $m)) {
-                    $candidate = trim(strip_tags($m[1]));
-                    $candidate = html_entity_decode($candidate);
-                    $candidate = preg_replace('/\s+/', ' ', $candidate);
-                    if (mb_strlen($candidate) > 20) { $lyrics = $candidate; break; }
+            $lyric_nodes = $xpath->query('//*[contains(@class, "lyric") or contains(@class, "lyrics")]');
+            if ($lyric_nodes->length > 0) {
+                foreach ($lyric_nodes as $ln) {
+                    $inner = $dom->saveHTML($ln);
+                    $text = $this->html_to_lyrics_text($inner);
+                    if (mb_strlen($text) > 20) { $lyrics = $text; break; }
                 }
             }
+        }
+        if (empty($lyrics) || mb_strlen($lyrics) < 20) {
+            if (preg_match('/متن آهنگ.*?<div[^>]*>(.+?)<\/div>.*?پخش آهنگ/su', $html, $m)) {
+                $text = $this->html_to_lyrics_text($m[1]);
+                if (mb_strlen($text) > 20) $lyrics = $text;
+            }
+        }
+        if (empty($lyrics) || mb_strlen($lyrics) < 20) {
+            $h2_nodes = $xpath->query('//h2[contains(text(), "متن آهنگ") or contains(text(), "متن ترانه")]/following-sibling::*');
+            $collected = array();
+            foreach ($h2_nodes as $node) {
+                $text = trim($node->textContent);
+                if (empty($text)) continue;
+                if (mb_strpos($text, 'پخش آهنگ') !== false || mb_strpos($text, 'دانلود آهنگ با کیفیت') !== false) break;
+                if (preg_match('/[\x{0600}-\x{06FF}]{10,}/u', $text) && mb_strlen($text) > 10) $collected[] = $text;
+                if (count($collected) > 30) break;
+            }
+            if (!empty($collected)) $lyrics = implode("\n\n", $collected);
         }
         if (empty($lyrics) || mb_strlen($lyrics) < 20) {
             $text_nodes = $xpath->query('//p | //div[contains(@class, "content")] | //div[contains(@class, "text")]');
@@ -384,12 +505,41 @@ class MyBia2MusicProvider implements ProviderInterface {
             }
             if (!empty($longest_fa)) $lyrics = $longest_fa;
         }
-        $lyrics = trim($lyrics);
-        if (mb_strlen($lyrics) > 10000) $lyrics = mb_substr($lyrics, 0, 10000);
-        $details['lyrics'] = $lyrics;
-        $details['music_text'] = $lyrics;
-        
-        return $details;
+        $lyrics = $this->clean_lyrics_text($lyrics);
+        return $lyrics;
+    }
+    
+    private function html_to_lyrics_text($html) {
+        if (empty($html)) return '';
+        $html = preg_replace('/<br\s*\/?>/i', "\n", $html);
+        $html = preg_replace('/<\/p>/i', "\n\n", $html);
+        $html = preg_replace('/<\/div>/i', "\n", $html);
+        $text = strip_tags($html);
+        $text = html_entity_decode($text, ENT_QUOTES | ENT_HTML5, 'UTF-8');
+        return $text;
+    }
+    
+    private function clean_lyrics_text($text) {
+        $text = trim($text);
+        if (empty($text)) return '';
+        $lines = preg_split('/\r\n|\r|\n/', $text);
+        $clean_lines = array();
+        foreach ($lines as $line) {
+            $line = trim($line);
+            if (empty($line)) { $clean_lines[] = ''; continue; }
+            if (mb_strpos($line, 'دانلود آهنگ با کیفیت') !== false) continue;
+            if (mb_strpos($line, 'پخش آهنگ') !== false && mb_strlen($line) < 20) continue;
+            if (mb_strpos($line, 'بیاتوموزیک') !== false && mb_strlen($line) < 30) continue;
+            $clean_lines[] = $line;
+        }
+        $text = implode("\n", $clean_lines);
+        $text = preg_replace("/\n{3,}/", "\n\n", $text);
+        $lines = explode("\n", $text);
+        $lines = array_map(function($l) { return preg_replace('/[ \t]+/', ' ', trim($l)); }, $lines);
+        $text = implode("\n", $lines);
+        $text = trim($text, "\n ");
+        if (mb_strlen($text) > 10000) $text = mb_substr($text, 0, 10000);
+        return $text;
     }
     
     private function detect_type_from_slug($slug) {
@@ -424,9 +574,7 @@ class MyBia2MusicProvider implements ProviderInterface {
             'error' => $error,
         );
         $existing = get_option('tscout_provider_status_mybia2music', array());
-        if (isset($existing['success']) && !$success) {
-            $status['success'] = $existing['success'];
-        }
+        if (isset($existing['success']) && !$success) $status['success'] = $existing['success'];
         update_option('tscout_provider_status_mybia2music', $status, false);
     }
 }
