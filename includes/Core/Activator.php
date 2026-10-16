@@ -166,6 +166,18 @@ class Activator {
             );
             $updated = true;
         }
+        if (empty($options['provider_policies']['ganja2music'])) {
+            if (!isset($options['provider_policies'])) $options['provider_policies'] = array();
+            $options['provider_policies']['ganja2music'] = array(
+                'enabled' => 1,
+                'rate_limit' => 3,
+                'license_status' => 'needs_review',
+                'allow_audio_download' => 1,
+                'allow_cover_download' => 1,
+                'metadata_allowed' => 1,
+            );
+            $updated = true;
+        }
         if (isset($options['provider_policies']['mybia2music'])) {
             if (empty($options['provider_policies']['mybia2music']['allow_audio_download'])) {
                 $options['provider_policies']['mybia2music']['allow_audio_download'] = 1;
@@ -210,6 +222,14 @@ class Activator {
                 'nicmusic' => array(
                     'enabled' => 1,
                     'rate_limit' => 2,
+                    'license_status' => 'needs_review',
+                    'allow_audio_download' => 1,
+                    'allow_cover_download' => 1,
+                    'metadata_allowed' => 1,
+                ),
+                'ganja2music' => array(
+                    'enabled' => 1,
+                    'rate_limit' => 3,
                     'license_status' => 'needs_review',
                     'allow_audio_download' => 1,
                     'allow_cover_download' => 1,

@@ -125,6 +125,14 @@ class NicMusicProvider implements ProviderInterface {
     }
     
     private function parse_search_results($html, $artist_en, $limit, $types) {
+        // تشخیص صفحه 404 نتایج جستجو: نیک موزیک وقتی چیزی پیدا نمی‌کند متن "متاسفانه موزیک یا خواننده ای مورد نظر پیدا نشد" را نشان می‌دهد
+        if (mb_strpos($html, 'متاسفانه موزیک یا خواننده ای مورد نظر پیدا نشد') !== false) {
+            // جستجو ناموفق - هیچ نتیجه مرتبطی وجود ندارد، آرایه خالی برگردان تا فالو‌بک به mybia2music/ganja2music انجام شود
+            return array();
+        }
+        // همچنین اگر عنوان شامل "404" و "نتايج جستجو" باشد و هیچ "دانلود آهنگ جدید" مرتبط نباشد
+        $has_results_marker = (mb_strpos($html, 'دانلود آهنگ جدید') !== false);
+
         $tracks = array();
         libxml_use_internal_errors(true);
         $dom = new \DOMDocument();
@@ -135,42 +143,54 @@ class NicMusicProvider implements ProviderInterface {
         }
         libxml_clear_errors();
         $xpath = new \DOMXPath($dom);
-        
-        // لینک‌های نتایج جستجو در نیک موزیک: معمولاً /divar-5/ یا /بترس/ و ...
-        // الگو: تمام لینک‌های داخلی که شامل nicmusic.net هستند و نه category/tag
-        $links = $xpath->query('//a[contains(@href, "nicmusic.net/") and not(contains(@href, "/category/")) and not(contains(@href, "/tag/")) and not(contains(@href, "?s=")) and not(contains(@href, "/page/")) and @href]');
+
+        // اولویت: لینک‌های داخل نتایج اصلی - article یا h2/h3 عنوان
+        // ابتدا سعی کن لینک‌های داخل <article> یا با کلاس entry را پیدا کنی
+        $query_strings = array(
+            '//article//a[contains(@href, "nicmusic.net/") and not(contains(@href, "/category/")) and not(contains(@href, "/tag/")) and not(contains(@href, "?s=")) and not(contains(@href, "/page/")) and @href]',
+            '//h2//a[contains(@href, "nicmusic.net/") and @href]',
+            '//h3//a[contains(@href, "nicmusic.net/") and @href]',
+            '//a[contains(@href, "nicmusic.net/") and not(contains(@href, "/category/")) and not(contains(@href, "/tag/")) and not(contains(@href, "?s=")) and not(contains(@href, "/page/")) and @href]'
+        );
+        $links = null;
+        foreach ($query_strings as $q) {
+            $found = $xpath->query($q);
+            if ($found && $found->length > 0) {
+                $links = $found;
+                break;
+            }
+        }
+        if (!$links || $links->length === 0) {
+            return array();
+        }
+
         $seen = array();
         $count = 0;
-        
+
         foreach ($links as $link) {
             if ($count >= $limit) break;
             $href = $link->getAttribute('href');
             if (strpos($href, '//') === 0) $href = 'https:' . $href;
             elseif (strpos($href, '/') === 0) $href = self::BASE_URL . $href;
-            
-            // فقط پست‌های آهنگ: باید شامل یک اسلاگ باشد و نه صفحه اصلی
+
             if ($href === self::BASE_URL . '/' || $href === self::BASE_URL) continue;
             if (strpos($href, '/top-100') !== false) continue;
-            if (strpos($href, '/%da%af%d9%84%da%86%db%8c%d9%86') !== false) continue; // گلچین
+            if (strpos($href, '/%da%af%d9%84%da%86%db%8c%d9%86') !== false) continue;
             if (isset($seen[$href])) continue;
             $seen[$href] = true;
-            
-            // استخراج external_id از URL: مثل /divar-5/ -> divar-5
+
             $path = parse_url($href, PHP_URL_PATH);
             $slug = trim($path, '/');
             if (empty($slug) || mb_strlen($slug) < 2) continue;
-            
-            // external_id: hash از slug
+
             $external_id = md5($slug);
-            
+
             $title = trim($link->getAttribute('title'));
             if (empty($title)) $title = trim($link->textContent);
             if (empty($title) || mb_strlen($title) < 2) continue;
-            
-            // فیلتر: فقط آهنگ‌های مرتبط با هنرمند جستجو شده - بررسی عنوان
-            // اگر artist_en انگلیسی است، بررسی کنیم که آیا عنوان شامل نام فارسی هنرمند یا انگلیسی است؟
-            // برای سادگی، همه را برمی‌گردانیم و در مرحله enrich فیلتر می‌کنیم
-            
+            // فیلتر اضافی: عنوان باید حداقل شامل "دانلود" یا طول مناسب باشد تا لینک‌های منو حذف شوند
+            if (mb_strlen($title) > 200) continue;
+
             $track = array(
                 'external_id' => $external_id,
                 'provider' => $this->get_id(),
@@ -183,6 +203,11 @@ class NicMusicProvider implements ProviderInterface {
             );
             $tracks[] = $track;
             $count++;
+        }
+
+        // اگر صفحه حاوی marker نتایج است ولی هیچ لینک معتبری پیدا نشد، آرایه خالی برگردان
+        if (empty($tracks) && !$has_results_marker) {
+            return array();
         }
         
         // Enrich با جزئیات
