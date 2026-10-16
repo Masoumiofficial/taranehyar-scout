@@ -235,3 +235,100 @@ HostDL (remote server)
 - ضد CSRF, XSS, SQL Injection, SSRF, Path Traversal
 
 **نتیجه**: این روش امن، سازگار و قابل‌توسعه است و با معماری واقعی پروژه هماهنگ است.
+
+---
+
+# گزارش تکمیلی ممیزی Taranehyar نسخه 1.0.6
+# تاریخ: 2026-10-16
+# تهیه‌کننده: اتحاد وردپرس - ترانه‌یار اسکات نسخه 1.0.1
+
+## تغییرات نسخه 1.0.6 نسبت به 1.0.5
+
+### فایل‌های تغییریافته
+- `taranehyar.php`: VERSION 1.0.6، همان ثابت‌ها و ساختار
+- `includes/class-ty-post-handler.php`: متن ترانه در متای `music_txt` ذخیره می‌شود (نه در محتوای پست)؛ فرم‌ها همان سه قالب فارسی/انگلیسی قابل انتخاب؛ title پست از الگوی SEO profile می‌آید
+- `includes/class-ty-seo.php`: الگوها همان، سه قالب قابل ویرایش در تنظیمات و فقط انتخاب در فرم
+- `docs/INSTALL-fa.md`: مستند کامل سه‌گانه تک‌آهنگ/ریمیکس/نوحه + آلبوم با کلیدهای یک‌مبنا `album_1_...`، مسیر جدید بدون تاریخ `{root}/{letter}/{slug}`
+- `hostdl/bootstrap.php`: همان احراز هویت hash_equals، safe_name و validate_archive_path با regex `{root}/{letter}/{slug}`، لیست ریشه مجاز شامل `music, remix, nohe, music-video, album, leech`
+- `hostdl/curl-music.php`: پشتیبانی archive_root برای ریمیکس و نوحه، همان SSRF و ID3
+- `hostdl/curl-album.php`: ساخت ZIP با 15 ترک حداکثر، کلیدهای `album_{n}_...`
+- `hostdl/PROTOCOL.md`: نسخه 1.0.6 با توضیح archive_path اختیاری و fallback به مسیر شمسی
+
+### متاکی‌های پیش‌فرض (بدون تغییر)
+```
+singer_taxonomy => singer
+musics_type => musics_type
+artist_en => artist_en
+song_en => song_en
+art_name => artist
+track_name => song
+music_txt => music_text (در فرم لیچ/تک آهنگ، مقدار از POST lyric گرفته و در music_txt ذخیره می‌شود)
+music128 => music128
+music320 => music320
+album => album (در 1.0.6 عدد تعداد ترک‌ها، نه آرایه)
+album128 => album128
+album320 => album320
+video480p => video480
+video720p => video720
+video1080p => video1080
+fifu_image_url / fifu_image_alt => کاور
+```
+قابل نگاشت از تنظیمات سازگاری قالب.
+
+### تفاوت مهم در مدیریت متن ترانه
+- در 1.0.6 متن ترانه از `$_POST['lyric']` خوانده و با `sanitize_textarea_field` ذخیره می‌شود در متای `music_txt`
+- در محتوا فقط بخش‌های توضیحی SEO و لیست عوامل و لینک‌های آلبوم قرار می‌گیرد
+- این برای جلوگیری از تکرار و سازگاری با قالب است
+- **Scout 1.0.1**: ما متن استخراج شده را هم در `music_txt` (برای ترانه‌یار) و هم در `music_text` (برای قالب آهنگ‌بان کاربر) ذخیره می‌کنیم تا هر دو قالب کار کنند.
+
+### تفاوت مهم در عنوان
+- عنوان پست از الگوی SEO profile با جای‌نگهدار `{artist}`, `{track}` ساخته می‌شود، مثل "دانلود آهنگ {artist} به نام {track}"
+- **نیاز کاربر**: عنوان فارسی جدا شده "دانلود آهنگ {artist_fa} به نام {track_fa}" با نام‌های فارسی تفکیک شده از MyBia2Music
+- **Scout 1.0.1**: در Publisher عنوان را با artist_fa و track_fa تفکیک شده می‌سازد و track_fa را اگر با artist_fa شروع شود جدا می‌کند.
+
+### سازگاری قالب کاربر (آهنگ‌بان)
+کاربر نگاشت زیر را گزارش کرده:
+```
+taxonomy singer
+musics_type → musics_type
+artist_en → artist_en
+song_en → song_en
+art_name → artist
+track_name → song
+music_txt → music_text
+music128 → music128
+music320 → music320
+album → album
+album128 → album128
+album320 → album320
+video480p → video480
+video720p → video720
+video1080p → video1080
+```
+این نگاشت در Scout 1.0.1 به صورت پیش‌فرض در theme_meta_mapping قرار گرفت و در get_meta_key() از ترکیب ty_options + theme_mapping خوانده می‌شود.
+
+### HostDL و انتقال فایل
+- پایه: https://dl.ahangban.ir/
+- endpointها از ty_options خوانده می‌شوند: `urldlhost`, `urlfunction_music`, `urlfunction_video`, `urlfunction_album`, `urlfunction_leech`
+- curl-music.php برای single/remix/nohe با پارامتر archive_root
+- curl-video.php برای ویدیو
+- curl-album.php برای آلبوم
+- curl-leech.php برای لیچ
+- احراز هویت با apitoken و hash_equals
+- مسیر نهایی: `{root}/{letter}/{artist_slug}/{safe_filename}`
+- **Scout 1.0.1**: انتقال با همان منطق HostDL_Adapter انجام می‌شود، archive_path از title_en ساخته می‌شود و safe_artist/track با Constants::sanitize_filename
+
+### باگ‌های گزارش‌شده توسط کاربر در Scout 1.0.0 و رفع در 1.0.1
+1. عنوان فارسی به صورت کامل h1 ذخیره می‌شد (مثل "دانلود آهنگ محسن یگانه - تو خوب") → الان جدا شده به artist_fa و track_fa
+2. متن ترانه ذخیره نمی‌شد → بهبود parse_track_page با 3 روش و ذخیره در music_txt + music_text
+3. کاور در پست ذخیره نمی‌شد → اضافه شدن attach_cover_as_featured با sideload و fifu_image_url
+4. موزیک به HostDL منتقل نمی‌شد و متا به URL هاست دانلود اشاره نمی‌کرد → should_transfer_file الان اجازه می‌دهد اگر license_approved باشد و allow_external_urls=1 پیش‌فرض
+5. نگاشت متاکی‌های قالب کاربر کار نمی‌کرد → اضافه شدن theme_meta_mapping و fallback در get_meta_key
+
+### تست سازگاری
+- Scout 1.0.1 مستقل نصب می‌شود (بدون نیاز به Taranehyar اما اگر باشد استفاده می‌کند)
+- بدون Fatal اگر Taranehyar یا HostDL نباشد (بررسی class_exists و is_configured)
+- جدول discoveries با ستون‌های جدید title_en و lyrics و migration خودکار
+- سیاست مجوز: needs_review نیاز به تایید دستی، license_approved اجازه انتقال
+
+**نتیجه ممیزی 1.0.6**: هیچ تغییر breaking در API اصلی وجود ندارد، فقط متن ترانه به music_txt منتقل شده و الگوهای SEO سه‌گانه قابل انتخاب هستند. Scout 1.0.1 با این تغییرات سازگار است و علاوه بر آن نگاشت قالب آهنگ‌بان را پشتیبانی می‌کند.

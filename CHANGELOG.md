@@ -1,5 +1,37 @@
 # Changelog - Taranehyar Scout
 
+## 1.0.1 - 2026-10-16
+
+### سازگار با Taranehyar 1.0.6
+- به‌روزرسانی برای سازگاری با ترانه‌یار 1.0.6 (قالب‌های سه‌گانه intro, ذخیره متن ترانه فقط در music_txt)
+- گزارش ممیزی v1.0.6 اضافه شد
+
+### اصلاح‌شده - بر اساس تست کاربر
+- **عنوان**: اصلاح استخراج نام فارسی خواننده و نام آهنگ از MyBia2Music. الان عنوان به صورت "دانلود آهنگ محسن یگانه به نام تو خوب" ساخته می‌شود (artist_fa جدا از track_fa)
+  - استخراج artist_fa از لینک `/artists/` 
+  - جدا کردن نام ترک از عنوان کامل h1
+  - جدا کردن track_en از title_en انگلیسی با استفاده از artist_en شناخته شده
+- **متن ترانه**: 
+  - بهبود parse_track_page با 3 روش regex/XPath برای استخراج lyrics
+  - ذخیره در ستون lyrics و metadata_json
+  - انتشار در متای `music_text` (برای قالب آهنگ‌بان) و `music_txt` (برای ترانه‌یار)
+- **کاور و موزیک**:
+  - اصلاح `TaranehyarAdapter::create_post` برای ذخیره `fifu_image_url`, `fifu_image_alt`, `music_text`, `video480/720/1080`
+  - اضافه کردن `attach_cover_as_featured()` برای دانلود کاور و ست کردن به عنوان تصویر شاخص وردپرس (media_handle_sideload)
+  - ذخیره سازگاری برای هر دو کلید (artist/song و art_name/track_name و music_text/music_txt و video480/video480p)
+  - اصلاح `Publisher::should_transfer_file` برای اجازه انتقال پس از تایید مجوز حتی اگر policy می‌گوید allow_audio_download=0
+  - پیش‌فرض `allow_external_urls=1` و `allow_audio_download=1` برای MyBia2Music
+- **متاکی‌ها**:
+  - نگاشت پیش‌فرض جدید برای قالب کاربر: art_name->artist, track_name->song, music_txt->music_text, video480p->video480 و غیره
+  - fallback هوشمند در `get_meta_key()` که هم از ty_options و هم از theme_mapping می‌خواند
+  - ستون‌های جدید `title_en` و `lyrics` در جدول discoveries با migration خودکار
+- **HostDL**:
+  - سازگار با https://dl.ahangban.ir/ و endpointهای کاربر
+  - بهبود `build_music_transfer_data` با archive_path صحیح
+
+### Added
+- ستون‌های `title_en` و `lyrics` در جدول discoveries
+
 ## 1.0.0 - 2026-10-16
 
 ### Added

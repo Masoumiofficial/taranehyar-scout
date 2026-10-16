@@ -186,22 +186,60 @@ class HostDLAdapter {
     }
     
     /**
-     * Build transfer data for music
+     * Build transfer data for music - سازگار با HostDL 1.0.6 و آدرس https://dl.ahangban.ir/
      */
     public function build_music_transfer_data($discovery, $artist_en, $track_en, $file_name) {
+        // برای نام فایل، از track_en انگلیسی استفاده کن اگر موجود است، وگرنه فارسی
+        $safe_artist = !empty($artist_en) ? $artist_en : ($discovery['artist_en'] ?? 'artist');
+        $safe_track = !empty($track_en) ? $track_en : ($discovery['title'] ?? 'track');
+        
+        // اگر title_en جدا شده داریم، از آن برای song_en استفاده کن
+        if (!empty($discovery['title_en'])) {
+            $safe_track = $discovery['title_en'];
+        } elseif (!empty($discovery['title'])) {
+            // اگر title شامل نام هنرمند است، سعی کن جدا کنی
+            $safe_track = $discovery['title'];
+        }
+        
+        $archive_path = $this->taranehyar_adapter->get_archive_path('music', $safe_artist);
+        if (!$archive_path) {
+            $archive_path = 'music/m/' . sanitize_title($safe_artist);
+        }
+        
         $data = array(
             'file_name' => $file_name,
-            'artist_en' => $artist_en,
-            'song_en' => $track_en,
+            'artist_en' => $safe_artist,
+            'song_en' => $safe_track,
             'link320' => isset($discovery['audio_url_320']) ? $discovery['audio_url_320'] : '',
             'link128' => isset($discovery['audio_url_128']) ? $discovery['audio_url_128'] : '',
             'cover' => isset($discovery['cover_url']) ? $discovery['cover_url'] : '',
             'tag_site' => $this->get_site_tag(),
-            'archive_path' => $this->taranehyar_adapter->get_archive_path('music', $artist_en),
+            'archive_path' => $archive_path,
             'archive_root' => 'music',
         );
         
         return $data;
+    }
+    
+    /**
+     * Build transfer data for video
+     */
+    public function build_video_transfer_data($discovery, $artist_en, $track_en, $file_name) {
+        $safe_artist = !empty($artist_en) ? $artist_en : ($discovery['artist_en'] ?? 'artist');
+        $archive_path = $this->taranehyar_adapter->get_archive_path('music-video', $safe_artist);
+        
+        return array(
+            'file_name' => $file_name,
+            'artist_en' => $safe_artist,
+            'song_en' => $track_en,
+            'link1080' => $discovery['video_url_1080'] ?? '',
+            'link720' => $discovery['video_url_720'] ?? '',
+            'link480' => $discovery['video_url_480'] ?? '',
+            'link320' => $discovery['audio_url_320'] ?? '',
+            'cover' => $discovery['cover_url'] ?? '',
+            'tag_site' => $this->get_site_tag(),
+            'archive_path' => $archive_path,
+        );
     }
     
     private function get_site_tag() {

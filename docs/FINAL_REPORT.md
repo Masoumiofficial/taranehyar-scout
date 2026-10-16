@@ -1,5 +1,6 @@
-# گزارش نهایی Taranehyar Scout - نسخه 1.0.0
+# گزارش نهایی Taranehyar Scout - نسخه 1.0.1
 # تاریخ: 2026-10-16
+# سازگار با Taranehyar 1.0.6 + آهنگ‌بان https://dl.ahangban.ir/
 # توسعه‌دهنده: اتحاد وردپرس - https://etehadwp.com/
 
 ## 1. خلاصه اجرایی
