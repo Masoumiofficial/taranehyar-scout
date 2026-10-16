@@ -1,0 +1,317 @@
+/* Taranehyar Scout Admin Styles - RTL & Modern */
+.tscout-wrap {
+    font-family: 'Estedad', Tahoma, sans-serif;
+    max-width: 1200px;
+}
+
+.tscout-header {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    padding: 20px;
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    gap: 15px;
+    margin-bottom: 20px;
+}
+
+.tscout-header-icon {
+    font-size: 48px;
+    background: rgba(255,255,255,0.2);
+    width: 70px;
+    height: 70px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.tscout-header-text h1 {
+    margin: 0;
+    font-size: 24px;
+    color: white;
+}
+
+.tscout-header-text p {
+    margin: 5px 0 0;
+    opacity: 0.9;
+}
+
+.tscout-stats-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 15px;
+    margin-bottom: 20px;
+}
+
+.tscout-stat-card {
+    background: white;
+    border: 1px solid #e5e7eb;
+    border-radius: 10px;
+    padding: 20px;
+    display: flex;
+    align-items: center;
+    gap: 15px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+}
+
+.stat-icon {
+    font-size: 32px;
+    background: #f3f4f6;
+    width: 50px;
+    height: 50px;
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.stat-number {
+    font-size: 28px;
+    font-weight: bold;
+    color: #1f2937;
+    display: block;
+}
+
+.stat-label {
+    color: #6b7280;
+    font-size: 13px;
+}
+
+.tscout-card {
+    background: white;
+    border: 1px solid #e5e7eb;
+    border-radius: 10px;
+    padding: 20px;
+    margin-bottom: 20px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+}
+
+.tscout-card-title {
+    font-size: 16px;
+    font-weight: bold;
+    margin-bottom: 15px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid #f3f4f6;
+}
+
+.tscout-grid-2 {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+}
+
+.tscout-grid-3 {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 15px;
+}
+
+.tscout-field {
+    margin-bottom: 15px;
+}
+
+.tscout-field label {
+    display: block;
+    font-weight: 600;
+    margin-bottom: 5px;
+}
+
+.tscout-field input[type="text"],
+.tscout-field input[type="number"],
+.tscout-field select,
+.tscout-field textarea {
+    width: 100%;
+    padding: 8px 12px;
+    border: 1px solid #d1d5db;
+    border-radius: 6px;
+}
+
+.tscout-hint {
+    font-size: 12px;
+    color: #6b7280;
+    margin-top: 5px;
+}
+
+.tscout-checkbox-group {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.tscout-checkbox {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.tscout-submit-row {
+    margin-top: 20px;
+    display: flex;
+    align-items: center;
+    gap: 15px;
+}
+
+.tscout-btn-primary {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    border: none;
+    padding: 10px 20px;
+    border-radius: 6px;
+    color: white;
+    font-weight: bold;
+    cursor: pointer;
+}
+
+.tscout-btn-primary:hover {
+    opacity: 0.9;
+}
+
+.tscout-status {
+    font-weight: bold;
+}
+
+.tscout-progress-bar {
+    background: #e5e7eb;
+    height: 20px;
+    border-radius: 10px;
+    overflow: hidden;
+    margin: 10px 0;
+}
+
+.tscout-progress-bar.small {
+    height: 10px;
+}
+
+.tscout-progress-fill {
+    background: linear-gradient(90deg, #667eea, #764ba2);
+    height: 100%;
+    transition: width 0.3s ease;
+}
+
+.tscout-filters {
+    background: white;
+    padding: 15px;
+    border-radius: 10px;
+    margin-bottom: 15px;
+    border: 1px solid #e5e7eb;
+}
+
+.tscout-filter-row {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+}
+
+.tscout-filter-row input,
+.tscout-filter-row select {
+    padding: 6px 10px;
+    border: 1px solid #d1d5db;
+    border-radius: 6px;
+}
+
+.tscout-bulk-actions {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    margin-bottom: 15px;
+}
+
+.tscout-table {
+    width: 100%;
+}
+
+.tscout-table th {
+    background: #f9fafb;
+    font-weight: 600;
+    text-align: right;
+}
+
+.tscout-badge {
+    display: inline-block;
+    padding: 3px 8px;
+    border-radius: 12px;
+    font-size: 11px;
+    color: white;
+    font-weight: bold;
+}
+
+.tscout-badge.license-verified { background: #10b981; }
+.tscout-badge.license-needs_review { background: #f59e0b; }
+.tscout-badge.license-metadata_only { background: #6b7280; }
+.tscout-badge.license-file_allowed_not_verified { background: #8b5cf6; }
+.tscout-badge.license-forbidden { background: #ef4444; }
+
+.tscout-badge.status-queued { background: #6b7280; }
+.tscout-badge.status-processing { background: #3b82f6; }
+.tscout-badge.status-completed { background: #10b981; }
+.tscout-badge.status-failed { background: #ef4444; }
+.tscout-badge.status-cancelled { background: #9ca3af; }
+
+.tscout-modal {
+    position: fixed;
+    z-index: 100000;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0,0,0,0.5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.tscout-modal-content {
+    background: white;
+    padding: 20px;
+    border-radius: 10px;
+    max-width: 800px;
+    width: 90%;
+    max-height: 80vh;
+    overflow-y: auto;
+    position: relative;
+}
+
+.tscout-modal-close {
+    position: absolute;
+    left: 15px;
+    top: 10px;
+    font-size: 24px;
+    cursor: pointer;
+}
+
+.tscout-provider-list {
+    list-style: none;
+    padding: 0;
+}
+
+.tscout-provider-list li {
+    display: flex;
+    justify-content: space-between;
+    padding: 8px 0;
+    border-bottom: 1px solid #f3f4f6;
+}
+
+.provider-status.enabled { color: #10b981; font-weight: bold; }
+.provider-status.disabled { color: #ef4444; }
+
+.tscout-queue-stats {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    margin-bottom: 15px;
+}
+
+.req {
+    color: #ef4444;
+}
+
+@media (max-width: 768px) {
+    .tscout-grid-2,
+    .tscout-grid-3 {
+        grid-template-columns: 1fr;
+    }
+    .tscout-filter-row {
+        flex-direction: column;
+        align-items: stretch;
+    }
+}

@@ -1,0 +1,217 @@
+<?php
+namespace TaranehyarScout\HostDL;
+
+if (!defined('ABSPATH')) exit;
+
+use TaranehyarScout\Security\UrlValidator;
+use TaranehyarScout\Logging\Logger;
+use TaranehyarScout\Catalog\TaranehyarAdapter;
+
+class HostDLAdapter {
+    
+    private $taranehyar_adapter;
+    
+    public function __construct() {
+        $this->taranehyar_adapter = TaranehyarAdapter::get_instance();
+    }
+    
+    /**
+     * Check if HostDL is configured
+     */
+    public function is_configured() {
+        $host = $this->taranehyar_adapter->get_download_host();
+        $token = $this->taranehyar_adapter->get_api_token();
+        $endpoint = $this->taranehyar_adapter->get_endpoint('music');
+        
+        return !empty($host) && !empty($token) && !empty($endpoint);
+    }
+    
+    /**
+     * Get HostDL status
+     */
+    public function get_status() {
+        return array(
+            'configured' => $this->is_configured(),
+            'host' => $this->taranehyar_adapter->get_download_host(),
+            'has_token' => !empty($this->taranehyar_adapter->get_api_token()),
+            'endpoints' => array(
+                'music' => $this->taranehyar_adapter->get_endpoint('music'),
+                'remix' => $this->taranehyar_adapter->get_endpoint('remix'),
+                'video' => $this->taranehyar_adapter->get_endpoint('video'),
+                'album' => $this->taranehyar_adapter->get_endpoint('album'),
+            )
+        );
+    }
+    
+    /**
+     * Transfer file to HostDL
+     * @param array $data Transfer data
+     * @param string $type Content type (music, remix, video, album)
+     * @return true|WP_Error
+     */
+    public function transfer($data, $type = 'music') {
+        if (!$this->is_configured()) {
+            return new \WP_Error('not_configured', 'هاست دانلود پیکربندی نشده است.');
+        }
+        
+        // Validate URLs in data
+        $url_fields = array('link320', 'link128', 'link1080', 'link720', 'link480', 'cover');
+        foreach ($url_fields as $field) {
+            if (!empty($data[$field])) {
+                $valid = UrlValidator::validate($data[$field], true);
+                if (is_wp_error($valid)) {
+                    return new \WP_Error('invalid_url', "آدرس {$field} نامعتبر است: " . $valid->get_error_message());
+                }
+            }
+        }
+        
+        // Try to use Taranehyar's HTTP class if available
+        if (class_exists('TaranehYar_Http')) {
+            $endpoint_key = $this->get_endpoint_key($type);
+            $result = \TaranehYar_Http::post_to_dlhost($endpoint_key, $data);
+            
+            if (is_wp_error($result)) {
+                Logger::error('HostDL transfer failed via TaranehYar_Http', array('type' => $type, 'error' => $result->get_error_message()));
+            } else {
+                Logger::info('HostDL transfer succeeded', array('type' => $type));
+            }
+            
+            return $result;
+        }
+        
+        // Fallback: direct implementation
+        return $this->direct_transfer($data, $type);
+    }
+    
+    private function direct_transfer($data, $type) {
+        $endpoint = $this->taranehyar_adapter->get_endpoint($type);
+        if (empty($endpoint)) {
+            $endpoint = $this->taranehyar_adapter->get_endpoint('music');
+        }
+        
+        $valid = UrlValidator::validate($endpoint);
+        if (is_wp_error($valid)) {
+            return $valid;
+        }
+        
+        $token = $this->taranehyar_adapter->get_api_token();
+        $data['token'] = $token;
+        
+        $args = array(
+            'body' => $data,
+            'timeout' => 300,
+            'sslverify' => true,
+        );
+        
+        $response = wp_remote_post($endpoint, $args);
+        
+        if (is_wp_error($response)) {
+            return $response;
+        }
+        
+        $code = wp_remote_retrieve_response_code($response);
+        if ($code < 200 || $code >= 300) {
+            return new \WP_Error('http_error', "هاست دانلود خطا برگرداند (HTTP {$code})");
+        }
+        
+        return true;
+    }
+    
+    private function get_endpoint_key($type) {
+        $map = array(
+            'music' => 'urlfunction_music',
+            'single' => 'urlfunction_music',
+            'remix' => 'urlfunction_remix',
+            'nohe' => 'urlfunction_nohe',
+            'video' => 'urlfunction_video',
+            'album' => 'urlfunction_album',
+            'leech' => 'urlfunction_leech',
+        );
+        return isset($map[$type]) ? $map[$type] : 'urlfunction_music';
+    }
+    
+    /**
+     * Validate file before transfer
+     */
+    public function validate_file($url, $allowed_types = array('mp3')) {
+        $valid = UrlValidator::validate($url);
+        if (is_wp_error($valid)) {
+            return $valid;
+        }
+        
+        // Check extension
+        $path = parse_url($url, PHP_URL_PATH);
+        $ext = strtolower(pathinfo($path, PATHINFO_EXTENSION));
+        
+        if (!empty($allowed_types) && !in_array($ext, $allowed_types, true)) {
+            return new \WP_Error('invalid_ext', "پسوند فایل ({$ext}) مجاز نیست. مجاز: " . implode(', ', $allowed_types));
+        }
+        
+        // Check file size via HEAD request (optional)
+        $head = wp_remote_head($url, array('timeout' => 15));
+        if (!is_wp_error($head)) {
+            $code = wp_remote_retrieve_response_code($head);
+            if ($code !== 200) {
+                return new \WP_Error('file_not_found', "فایل یافت نشد (HTTP {$code})");
+            }
+            
+            $headers = wp_remote_retrieve_headers($head);
+            $content_length = isset($headers['content-length']) ? intval($headers['content-length']) : 0;
+            $content_type = isset($headers['content-type']) ? $headers['content-type'] : '';
+            
+            // Check size limit (100MB default)
+            $max_size = 100 * 1024 * 1024;
+            if ($content_length > $max_size) {
+                return new \WP_Error('file_too_large', "حجم فایل بیش از حد مجاز است ({$content_length} بایت)");
+            }
+            
+            // Check MIME type
+            if (!empty($content_type)) {
+                $allowed_mimes = array('audio/mpeg', 'audio/mp3', 'video/mp4', 'image/jpeg', 'image/png', 'image/webp');
+                $is_allowed = false;
+                foreach ($allowed_mimes as $mime) {
+                    if (strpos($content_type, $mime) !== false) {
+                        $is_allowed = true;
+                        break;
+                    }
+                }
+                // For now, don't strictly enforce MIME, just log
+                if (!$is_allowed) {
+                    Logger::warning('Unexpected MIME type', array('url' => $url, 'mime' => $content_type));
+                }
+            }
+        }
+        
+        return true;
+    }
+    
+    /**
+     * Build transfer data for music
+     */
+    public function build_music_transfer_data($discovery, $artist_en, $track_en, $file_name) {
+        $data = array(
+            'file_name' => $file_name,
+            'artist_en' => $artist_en,
+            'song_en' => $track_en,
+            'link320' => isset($discovery['audio_url_320']) ? $discovery['audio_url_320'] : '',
+            'link128' => isset($discovery['audio_url_128']) ? $discovery['audio_url_128'] : '',
+            'cover' => isset($discovery['cover_url']) ? $discovery['cover_url'] : '',
+            'tag_site' => $this->get_site_tag(),
+            'archive_path' => $this->taranehyar_adapter->get_archive_path('music', $artist_en),
+            'archive_root' => 'music',
+        );
+        
+        return $data;
+    }
+    
+    private function get_site_tag() {
+        $adapter_settings = $this->taranehyar_adapter->get_settings();
+        if (!empty($adapter_settings['namesite2'])) {
+            return $adapter_settings['namesite2'];
+        }
+        if (!empty($adapter_settings['urlsite'])) {
+            return $adapter_settings['urlsite'];
+        }
+        return get_bloginfo('name');
+    }
+}
