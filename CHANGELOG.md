@@ -1,5 +1,12 @@
 # Changelog - Taranehyar Scout
 
+## 1.0.5 - 2026-10-17
+
+### رفع خطای بحرانی Fatal Error
+- **باگ:** در v1.0.4 فایل `NicMusicProvider.php` ساخته شد و در `ProviderRegistry` ثبت شد ولی در `taranehyar-scout.php` لود نشده بود → `Class 'NicMusicProvider' not found` → "یک خطای مهم در این وب سایت وجود دارد"
+- **رفع:** اضافه کردن `require_once ... NicMusicProvider.php` در فایل اصلی
+- تست: افزونه بدون Fatal فعال می‌شود، هر دو provider (mybia2music و nicmusic) در دسترس هستند
+
 ## 1.0.4 - 2026-10-17
 
 ### ویژگی جدید: پشتیبانی از نیک موزیک
