@@ -1,14 +1,14 @@
 === Taranehyar Scout | ترانه‌یار اسکات ===
 Contributors: etehadwp
-Tags: music, discovery, catalog, taranehyar, iranian music
+Tags: music, discovery, catalog, taranehyar, iranian music, ahangban
 Requires at least: 5.8
 Tested up to: 6.7
 Requires PHP: 7.2
-Stable tag: 1.0.0
+Stable tag: 1.0.1
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
-کشف، تطبیق و مدیریت هوشمند آثار موسیقی در وردپرس - مکمل ترانه‌یار
+کشف، تطبیق و مدیریت هوشمند آثار موسیقی در وردپرس - مکمل ترانه‌یار 1.0.6 - سازگار با قالب آهنگ‌بان
 
 == Description ==
 

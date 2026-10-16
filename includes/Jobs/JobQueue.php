@@ -281,25 +281,38 @@ class JobQueue {
         ));
         
         if ($existing) {
-            // Update existing
+            // Update existing - نسخه 1.0.1 با title_en و lyrics
+            $update_data = array(
+                'title' => $normalized['title'],
+                'title_normalized' => $normalized['title_normalized'],
+                'title_fa' => $normalized['title_fa'],
+                'title_en' => $normalized['title_en'] ?? '',
+                'artist_fa' => $normalized['artist_fa'],
+                'cover_url' => $normalized['cover_url'],
+                'audio_url_128' => $normalized['audio_url_128'],
+                'audio_url_320' => $normalized['audio_url_320'],
+                'lyrics' => $normalized['lyrics'] ?? '',
+                'metadata_json' => $normalized['metadata_json'],
+                'confidence' => $normalized['confidence'],
+                'updated_at' => current_time('mysql'),
+            );
+            // فقط ستون‌هایی که وجود دارند را به‌روز کن (برای سازگاری با نسخه قدیمی)
+            $existing_cols = $wpdb->get_col("SHOW COLUMNS FROM " . TSCOUT_TABLE_DISCOVERIES, 0);
+            $filtered = array();
+            foreach ($update_data as $k => $v) {
+                if (in_array($k, $existing_cols)) {
+                    $filtered[$k] = $v;
+                }
+            }
             $wpdb->update(
                 TSCOUT_TABLE_DISCOVERIES,
-                array(
-                    'title' => $normalized['title'],
-                    'title_normalized' => $normalized['title_normalized'],
-                    'cover_url' => $normalized['cover_url'],
-                    'audio_url_128' => $normalized['audio_url_128'],
-                    'audio_url_320' => $normalized['audio_url_320'],
-                    'metadata_json' => $normalized['metadata_json'],
-                    'confidence' => $normalized['confidence'],
-                    'updated_at' => current_time('mysql'),
-                ),
+                $filtered,
                 array('provider_hash' => $normalized['provider_hash'])
             );
             return intval($existing);
         }
         
-        // Insert new
+        // Insert new - نسخه 1.0.1
         $data = array(
             'external_id' => $normalized['external_id'],
             'provider' => $normalized['provider'],
@@ -310,6 +323,7 @@ class JobQueue {
             'title' => $normalized['title'],
             'title_normalized' => $normalized['title_normalized'],
             'title_fa' => $normalized['title_fa'],
+            'title_en' => $normalized['title_en'] ?? '',
             'album' => $normalized['album'],
             'track_type' => $normalized['track_type'],
             'year' => $normalized['year'],
@@ -323,6 +337,7 @@ class JobQueue {
             'video_url_480' => $normalized['video_url_480'],
             'video_url_720' => $normalized['video_url_720'],
             'video_url_1080' => $normalized['video_url_1080'],
+            'lyrics' => $normalized['lyrics'] ?? '',
             'metadata_json' => $normalized['metadata_json'],
             'confidence' => $normalized['confidence'],
             'license_status' => $normalized['license_status'],
@@ -334,6 +349,17 @@ class JobQueue {
             'created_at' => current_time('mysql'),
             'updated_at' => current_time('mysql'),
         );
+        // فیلتر برای ستون‌های موجود
+        $existing_cols = $wpdb->get_col("SHOW COLUMNS FROM " . TSCOUT_TABLE_DISCOVERIES, 0);
+        if (!empty($existing_cols)) {
+            $filtered = array();
+            foreach ($data as $k => $v) {
+                if (in_array($k, $existing_cols)) {
+                    $filtered[$k] = $v;
+                }
+            }
+            $data = $filtered;
+        }
         
         $result = $wpdb->insert(TSCOUT_TABLE_DISCOVERIES, $data);
         

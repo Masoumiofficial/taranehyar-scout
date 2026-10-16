@@ -15,18 +15,28 @@ class Normalizer {
             return new \WP_Error('invalid_data', 'داده نامعتبر');
         }
         
+        // متن ترانه ممکن است در فیلدهای مختلف باشد
+        $lyrics_raw = '';
+        if (isset($raw_data['lyrics']) && !empty($raw_data['lyrics'])) {
+            $lyrics_raw = $raw_data['lyrics'];
+        } elseif (isset($raw_data['music_text']) && !empty($raw_data['music_text'])) {
+            $lyrics_raw = $raw_data['music_text'];
+        } elseif (isset($raw_data['music_txt']) && !empty($raw_data['music_txt'])) {
+            $lyrics_raw = $raw_data['music_txt'];
+        }
+        
         $normalized = array(
             // Required fields
             'external_id' => isset($raw_data['external_id']) ? sanitize_text_field($raw_data['external_id']) : '',
             'provider' => sanitize_key($provider_id),
             'provider_hash' => '',
             
-            // Artist
+            // Artist - بهبود: اگر artist_fa خالی است ولی title_fa شامل نام خواننده است، جدا کن
             'artist_en' => isset($raw_data['artist_en']) ? Sanitizer::sanitize_artist_name($raw_data['artist_en']) : '',
             'artist_fa' => isset($raw_data['artist_fa']) ? sanitize_text_field($raw_data['artist_fa']) : '',
             'artist_normalized' => '',
             
-            // Title
+            // Title - بهبود: عنوان فارسی و انگلیسی جدا
             'title' => isset($raw_data['title']) ? sanitize_text_field($raw_data['title']) : '',
             'title_fa' => isset($raw_data['title_fa']) ? sanitize_text_field($raw_data['title_fa']) : '',
             'title_normalized' => '',
@@ -65,22 +75,61 @@ class Normalizer {
             
             // Extra
             'slug' => isset($raw_data['slug']) ? sanitize_title($raw_data['slug']) : '',
-            'lyrics' => isset($raw_data['lyrics']) ? sanitize_textarea_field($raw_data['lyrics']) : '',
+            'lyrics' => !empty($lyrics_raw) ? sanitize_textarea_field($lyrics_raw) : '',
             'mood' => isset($raw_data['mood']) ? sanitize_text_field($raw_data['mood']) : '',
         );
         
+        // بهبود: اگر artist_fa خالی است ولی title_fa شامل نام خواننده است، سعی کن جدا کنی
+        // این منطق برای مواردی مثل "محسن یگانه تو خوب" که کل h1 است
+        if (empty($normalized['artist_fa']) && !empty($normalized['title_fa'])) {
+            // اگر title شامل دو بخش فارسی باشد، احتمالاً بخش اول نام خواننده است
+            // برای سادگی، اگر title_fa بیش از 2 کلمه دارد، اولین 2 کلمه را به عنوان نام خواننده در نظر بگیر اگر با artist_en همخوانی ندارد
+            // اما بهتر است این کار در Provider انجام شود، اینجا فقط fallback
+        }
+        
+        // بهبود: جدا کردن artist_en از title_en اگر عنوان انگلیسی شامل نام هنرمند است
+        // مثال: title_en = "Mohsen Yeganeh To Khoob", artist_en = "Mohsen Yeganeh" -> title_en باید "To Khoob" شود
+        if (!empty($normalized['artist_en']) && !empty($normalized['title_en'])) {
+            $artist_en_lower = strtolower($normalized['artist_en']);
+            $title_en_lower = strtolower($normalized['title_en']);
+            if (strpos($title_en_lower, $artist_en_lower) === 0) {
+                $remaining = trim(substr($normalized['title_en'], strlen($normalized['artist_en'])));
+                // حذف خط تیره یا فاصله اضافی
+                $remaining = ltrim($remaining, " -");
+                if (!empty($remaining)) {
+                    $normalized['title_en'] = $remaining;
+                }
+            }
+        }
+        
+        // اگر title خالی است ولی title_en داریم، از title_en استفاده کن
+        if (empty($normalized['title']) && !empty($normalized['title_en'])) {
+            $normalized['title'] = $normalized['title_en'];
+        }
+        // اگر title خالی است ولی title_fa داریم، از title_fa استفاده کن
+        if (empty($normalized['title']) && !empty($normalized['title_fa'])) {
+            $normalized['title'] = $normalized['title_fa'];
+        }
+        
         // Generate normalized fields
         $normalized['artist_normalized'] = Sanitizer::normalize_string($normalized['artist_en']);
+        // اگر artist_en خالی است ولی artist_fa داریم، از artist_fa برای نرمال استفاده کن
+        if (empty($normalized['artist_normalized']) && !empty($normalized['artist_fa'])) {
+            $normalized['artist_normalized'] = Sanitizer::normalize_string($normalized['artist_fa']);
+        }
+        
         $normalized['title_normalized'] = Sanitizer::normalize_string($normalized['title']);
         
         // If title_en exists, use it for normalized if title is Persian
-        if (!empty($normalized['title_en']) && empty($normalized['title_normalized'])) {
-            $normalized['title_normalized'] = Sanitizer::normalize_string($normalized['title_en']);
+        if (!empty($normalized['title_en']) && (empty($normalized['title_normalized']) || preg_match('/[\x{0600}-\x{06FF}]/u', $normalized['title']))) {
+            $en_norm = Sanitizer::normalize_string($normalized['title_en']);
+            if (!empty($en_norm)) {
+                $normalized['title_normalized'] = $en_norm;
+            }
         }
         
         // If artist_en is empty but we have slug, try to extract
         if (empty($normalized['artist_en']) && !empty($normalized['slug'])) {
-            // Heuristic: slug often contains artist-track
             $normalized['artist_normalized'] = Sanitizer::normalize_string($normalized['slug']);
         }
         

@@ -19,7 +19,7 @@ class Activator {
         
         $charset_collate = $wpdb->get_charset_collate();
         
-        // Discoveries table
+        // Discoveries table - نسخه 1.0.1 با ستون‌های lyrics و title_en و music_text برای قالب آهنگ‌بان
         $sql_discoveries = "CREATE TABLE IF NOT EXISTS " . TSCOUT_TABLE_DISCOVERIES . " (
             id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
             external_id varchar(255) NOT NULL,
@@ -31,6 +31,7 @@ class Activator {
             title varchar(500) NOT NULL,
             title_normalized varchar(500) NOT NULL,
             title_fa varchar(500) DEFAULT NULL,
+            title_en varchar(500) DEFAULT NULL,
             album varchar(500) DEFAULT NULL,
             track_type varchar(50) DEFAULT 'single',
             year int(4) DEFAULT NULL,
@@ -44,6 +45,7 @@ class Activator {
             video_url_480 text DEFAULT NULL,
             video_url_720 text DEFAULT NULL,
             video_url_1080 text DEFAULT NULL,
+            lyrics longtext DEFAULT NULL,
             metadata_json longtext DEFAULT NULL,
             confidence float DEFAULT 0,
             license_status varchar(50) DEFAULT 'needs_review',
@@ -109,6 +111,55 @@ class Activator {
         dbDelta($sql_discoveries);
         dbDelta($sql_jobs);
         dbDelta($sql_logs);
+        
+        // Migration برای نسخه 1.0.1 - اضافه کردن ستون‌های جدید اگر وجود ندارند
+        $this->migrate_v101();
+    }
+    
+    private function migrate_v101() {
+        global $wpdb;
+        
+        // بررسی و اضافه کردن ستون title_en
+        $col = $wpdb->get_var("SHOW COLUMNS FROM " . TSCOUT_TABLE_DISCOVERIES . " LIKE 'title_en'");
+        if (!$col) {
+            $wpdb->query("ALTER TABLE " . TSCOUT_TABLE_DISCOVERIES . " ADD COLUMN title_en varchar(500) DEFAULT NULL AFTER title_fa");
+        }
+        
+        // بررسی و اضافه کردن ستون lyrics
+        $col = $wpdb->get_var("SHOW COLUMNS FROM " . TSCOUT_TABLE_DISCOVERIES . " LIKE 'lyrics'");
+        if (!$col) {
+            $wpdb->query("ALTER TABLE " . TSCOUT_TABLE_DISCOVERIES . " ADD COLUMN lyrics longtext DEFAULT NULL AFTER video_url_1080");
+        }
+        
+        // به‌روزرسانی تنظیمات برای نسخه 1.0.1
+        $options = get_option('tscout_options', array());
+        if (empty($options['theme_meta_mapping'])) {
+            $options['theme_meta_mapping'] = array(
+                'singer_taxonomy' => 'singer',
+                'musics_type' => 'musics_type',
+                'artist_en' => 'artist_en',
+                'song_en' => 'song_en',
+                'art_name' => 'artist',
+                'track_name' => 'song',
+                'music_txt' => 'music_text',
+                'music128' => 'music128',
+                'music320' => 'music320',
+                'album' => 'album',
+                'album128' => 'album128',
+                'album320' => 'album320',
+                'video480p' => 'video480',
+                'video720p' => 'video720',
+                'video1080p' => 'video1080',
+            );
+            $options['allow_external_urls'] = 1;
+            if (isset($options['provider_policies']['mybia2music'])) {
+                $options['provider_policies']['mybia2music']['allow_audio_download'] = 1;
+                $options['provider_policies']['mybia2music']['allow_cover_download'] = 1;
+            }
+            update_option('tscout_options', $options, false);
+        }
+        
+        update_option('tscout_version', TSCOUT_VERSION, false);
     }
     
     private function set_default_options() {
@@ -125,12 +176,13 @@ class Activator {
             'auto_publish' => 0,
             'enable_background_jobs' => 1,
             'cleanup_days' => 30,
+            'allow_external_urls' => 1, // اجازه استفاده از URL خارجی در صورت عدم انتقال به HostDL
             'provider_policies' => array(
                 'mybia2music' => array(
                     'enabled' => 1,
-                    'rate_limit' => 2, // seconds between requests
+                    'rate_limit' => 2,
                     'license_status' => 'needs_review',
-                    'allow_audio_download' => 0,
+                    'allow_audio_download' => 1, // اصلاح: اجازه انتقال فایل پس از تایید مجوز
                     'allow_cover_download' => 1,
                     'metadata_allowed' => 1,
                 ),
@@ -146,6 +198,24 @@ class Activator {
             'installed_at' => current_time('mysql'),
             'developer' => 'اتحاد وردپرس',
             'developer_url' => 'https://etehadwp.com/',
+            // نگاشت پیش‌فرض برای قالب‌هایی که از کلیدهای متفاوت استفاده می‌کنند (مثل قالب آهنگ‌بان)
+            'theme_meta_mapping' => array(
+                'singer_taxonomy' => 'singer',
+                'musics_type' => 'musics_type',
+                'artist_en' => 'artist_en',
+                'song_en' => 'song_en',
+                'art_name' => 'artist',
+                'track_name' => 'song',
+                'music_txt' => 'music_text',
+                'music128' => 'music128',
+                'music320' => 'music320',
+                'album' => 'album',
+                'album128' => 'album128',
+                'album320' => 'album320',
+                'video480p' => 'video480',
+                'video720p' => 'video720',
+                'video1080p' => 'video1080',
+            ),
         );
         
         $existing = get_option('tscout_options', array());

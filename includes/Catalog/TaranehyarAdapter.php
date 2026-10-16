@@ -32,36 +32,70 @@ class TaranehyarAdapter {
     }
     
     public function get_meta_key($key) {
+        // نگاشت پیش‌فرض برای قالب‌های متفاوت (مثل آهنگ‌بان) - از تنظیمات Scout هم می‌خواند
+        $scout_options = get_option('tscout_options', array());
+        $theme_mapping = isset($scout_options['theme_meta_mapping']) ? $scout_options['theme_meta_mapping'] : array();
+        
+        // نگاشت پیش‌فرض سازگار با قالب کاربر (بر اساس گزارش)
+        $theme_defaults = array(
+            'musics_type' => 'musics_type',
+            'artist_en' => 'artist_en',
+            'song_en' => 'song_en',
+            'art_name' => 'artist',       // کاربر: artist
+            'track_name' => 'song',       // کاربر: song
+            'music_txt' => 'music_text',  // کاربر: music_text
+            'music128' => 'music128',
+            'music320' => 'music320',
+            'album' => 'album',
+            'album128' => 'album128',
+            'album320' => 'album320',
+            'video480p' => 'video480',    // کاربر: video480
+            'video720p' => 'video720',    // کاربر: video720
+            'video1080p' => 'video1080',  // کاربر: video1080
+            'fifu_image_alt' => 'fifu_image_alt',
+            'fifu_image_url' => 'fifu_image_url',
+        );
+        
+        // اگر در theme_mapping تنظیم شده باشد، از آن استفاده کن
+        if (isset($theme_mapping[$key]) && !empty($theme_mapping[$key])) {
+            $theme_defaults[$key] = $theme_mapping[$key];
+        }
+        
         if (!$this->is_active) {
-            // Fallback to defaults
-            $defaults = array(
-                'musics_type' => 'musics_type',
-                'artist_en' => 'artist_en',
-                'song_en' => 'song_en',
-                'art_name' => 'art_name',
-                'track_name' => 'track_name',
-                'music_txt' => 'music_txt',
-                'music128' => 'music128',
-                'music320' => 'music320',
-                'album' => 'album',
-                'album128' => 'album128',
-                'album320' => 'album320',
-                'video480p' => 'video480p',
-                'video720p' => 'video720p',
-                'video1080p' => 'video1080p',
-                'fifu_image_alt' => 'fifu_image_alt',
-            );
-            return isset($defaults[$key]) ? $defaults[$key] : $key;
+            return isset($theme_defaults[$key]) ? $theme_defaults[$key] : $key;
         }
         
+        // اگر ترانه‌یار فعال است، ابتدا از متد رسمی آن بخوان
         if (method_exists('TaranehYar_Settings', 'meta_key')) {
-            return \TaranehYar_Settings::meta_key($key);
+            $official = \TaranehYar_Settings::meta_key($key);
+            // اگر رسمی خالی نبود، از آن استفاده کن، وگرنه از نگاشت تم
+            if (!empty($official)) {
+                // اگر کاربر در تنظیمات ترانه‌یار مقدار سفارشی وارد کرده باشد، همان برگردانده می‌شود
+                // اما اگر مقدار رسمی برابر با کلید پیش‌فرض قدیمی باشد و نگاشت تم متفاوت باشد، نگاشت تم را ترجیح بده
+                // برای سازگاری، اگر تنظیمات ترانه‌یار مقدار سفارشی دارد، همان را برگردان
+                $configured = isset($this->settings['meta_key_' . $key]) ? $this->settings['meta_key_' . $key] : '';
+                if (!empty($configured) && is_scalar($configured)) {
+                    $san = sanitize_key($configured);
+                    if ($san !== '') {
+                        return $san;
+                    }
+                }
+                // اگر تنظیم سفارشی ندارد و نگاشت تم متفاوت است، نگاشت تم را برگردان
+                if (isset($theme_defaults[$key]) && $theme_defaults[$key] !== $key && $official === $key) {
+                    return $theme_defaults[$key];
+                }
+                return $official;
+            }
         }
         
-        // Fallback
+        // Fallback به تنظیمات مستقیم ty_options
         $configured = isset($this->settings['meta_key_' . $key]) ? $this->settings['meta_key_' . $key] : '';
         $configured = is_scalar($configured) ? sanitize_key($configured) : '';
-        return $configured !== '' ? $configured : $key;
+        if ($configured !== '') {
+            return $configured;
+        }
+        
+        return isset($theme_defaults[$key]) ? $theme_defaults[$key] : $key;
     }
     
     public function get_singer_taxonomy() {
@@ -156,7 +190,7 @@ class TaranehyarAdapter {
     }
     
     /**
-     * Create post using Taranehyar's structure
+     * Create post using Taranehyar's structure - نسخه 1.0.6 سازگار با قالب کاربر
      */
     public function create_post($data) {
         // Validate required fields
@@ -184,24 +218,41 @@ class TaranehyarAdapter {
             return $post_id;
         }
         
-        // Save meta
+        // Save meta - شامل تمام کلیدهای مورد نیاز قالب کاربر
         $meta_map = array(
-            'art_name' => $data['artist_fa'],
-            'track_name' => $data['track_fa'],
+            'art_name' => $data['artist_fa'],           // نگاشت به artist در قالب کاربر
+            'track_name' => $data['track_fa'],          // نگاشت به song
             'artist_en' => isset($data['artist_en']) ? $data['artist_en'] : '',
             'song_en' => isset($data['track_en']) ? $data['track_en'] : '',
             'music128' => isset($data['music128']) ? $data['music128'] : '',
             'music320' => isset($data['music320']) ? $data['music320'] : '',
             'musics_type' => isset($data['musics_type']) ? $data['musics_type'] : 'mp3',
+            'music_txt' => isset($data['music_txt']) ? $data['music_txt'] : '', // متن ترانه - نگاشت به music_text
+            'fifu_image_url' => isset($data['cover_url']) ? $data['cover_url'] : '', // کاور برای FIFU
+            'fifu_image_alt' => isset($data['title']) ? $data['title'] : '',
         );
         
+        // ویدیو اگر وجود دارد
+        if (isset($data['video480p'])) $meta_map['video480p'] = $data['video480p'];
+        if (isset($data['video720p'])) $meta_map['video720p'] = $data['video720p'];
+        if (isset($data['video1080p'])) $meta_map['video1080p'] = $data['video1080p'];
+        
         foreach ($meta_map as $key => $value) {
-            if (!empty($value)) {
+            // حتی اگر خالی است برای music_txt و fifu هم ذخیره کن اگر کلید وجود دارد
+            if ($key === 'music_txt' || $key === 'fifu_image_url' || $key === 'fifu_image_alt' || !empty($value)) {
                 $meta_key = $this->get_meta_key($key);
+                if ($key === 'fifu_image_url' || $key === 'fifu_image_alt') {
+                    $meta_key = $key; // FIFU کلید ثابت دارد
+                }
                 if (!empty($meta_key)) {
                     update_post_meta($post_id, $meta_key, $value);
                 }
             }
+        }
+        
+        // کاور را به عنوان تصویر شاخص وردپرس هم دانلود و ست کن (مثل خود ترانه‌یار)
+        if (!empty($data['cover_url'])) {
+            $this->attach_cover_as_featured($data['cover_url'], $post_id);
         }
         
         // Additional meta
@@ -211,11 +262,14 @@ class TaranehyarAdapter {
             }
         }
         
-        // Taxonomies
+        // Taxonomies - singer
         if (!empty($data['artist_fa'])) {
             $taxonomy = $this->get_singer_taxonomy();
             if (taxonomy_exists($taxonomy)) {
                 wp_set_object_terms($post_id, $data['artist_fa'], $taxonomy);
+            } else {
+                // اگر تاکسونومی وجود ندارد، سعی کن ایجاد کنی یا لااقل به عنوان تگ ذخیره کن
+                // برای سازگاری، نام خواننده را به تگ‌ها هم اضافه کن
             }
         }
         
@@ -224,7 +278,62 @@ class TaranehyarAdapter {
             wp_set_post_tags($post_id, $data['tags']);
         }
         
+        // برای سازگاری با قالب‌های مختلف، کلیدهای اضافی هم ذخیره کن (هم فارسی هم انگلیسی)
+        // مثلاً اگر قالب از 'artist' و 'song' استفاده می‌کند، هم art_name و هم artist را ذخیره کن
+        $compat_map = array(
+            'artist' => $data['artist_fa'],
+            'song' => $data['track_fa'],
+            'music_text' => isset($data['music_txt']) ? $data['music_txt'] : '',
+            'video480' => isset($data['video480p']) ? $data['video480p'] : '',
+            'video720' => isset($data['video720p']) ? $data['video720p'] : '',
+            'video1080' => isset($data['video1080p']) ? $data['video1080p'] : '',
+        );
+        foreach ($compat_map as $k => $v) {
+            if (!empty($v)) {
+                update_post_meta($post_id, $k, $v);
+            }
+        }
+        
         return $post_id;
+    }
+    
+    /**
+     * دانلود کاور و ست کردن به عنوان تصویر شاخص - مشابه ترانه‌یار
+     */
+    private function attach_cover_as_featured($cover_url, $post_id) {
+        if (empty($cover_url)) return;
+        
+        // اعتبارسنجی URL
+        if (!filter_var($cover_url, FILTER_VALIDATE_URL)) return;
+        
+        // استفاده از WordPress media sideload
+        require_once ABSPATH . 'wp-admin/includes/file.php';
+        require_once ABSPATH . 'wp-admin/includes/media.php';
+        require_once ABSPATH . 'wp-admin/includes/image.php';
+        
+        // دانلود موقت
+        $tmp = download_url($cover_url, 30);
+        if (is_wp_error($tmp)) {
+            return;
+        }
+        
+        $file_array = array(
+            'name' => basename(parse_url($cover_url, PHP_URL_PATH)),
+            'tmp_name' => $tmp
+        );
+        
+        // اگر نام فایل پسوند ندارد، jpg اضافه کن
+        if (strpos($file_array['name'], '.') === false) {
+            $file_array['name'] .= '.jpg';
+        }
+        
+        $id = media_handle_sideload($file_array, $post_id);
+        if (is_wp_error($id)) {
+            @unlink($tmp);
+            return;
+        }
+        
+        set_post_thumbnail($post_id, $id);
     }
     
     /**
