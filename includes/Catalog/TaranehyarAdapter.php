@@ -32,67 +32,52 @@ class TaranehyarAdapter {
     }
     
     public function get_meta_key($key) {
-        // نگاشت پیش‌فرض برای قالب‌های متفاوت (مثل آهنگ‌بان) - از تنظیمات Scout هم می‌خواند
         $scout_options = get_option('tscout_options', array());
         $theme_mapping = isset($scout_options['theme_meta_mapping']) ? $scout_options['theme_meta_mapping'] : array();
         
-        // نگاشت پیش‌فرض سازگار با قالب کاربر (بر اساس گزارش)
+        // نگاشت پیش‌فرض - سازگار با ترانه‌یار 1.0.8 و قالب رز موزیک
+        // ترانه‌یار 1.0.8 پیش‌فرض: art_name, track_name, music_txt, music128, music320, etc
+        // رز موزیک/آهنگ‌بان: artist, song, music_text, video480, etc
         $theme_defaults = array(
             'musics_type' => 'musics_type',
             'artist_en' => 'artist_en',
             'song_en' => 'song_en',
-            'art_name' => 'artist',       // کاربر: artist
-            'track_name' => 'song',       // کاربر: song
-            'music_txt' => 'music_text',  // کاربر: music_text
+            'art_name' => 'art_name',
+            'track_name' => 'track_name',
+            'music_txt' => 'music_txt',
             'music128' => 'music128',
             'music320' => 'music320',
             'album' => 'album',
             'album128' => 'album128',
             'album320' => 'album320',
-            'video480p' => 'video480',    // کاربر: video480
-            'video720p' => 'video720',    // کاربر: video720
-            'video1080p' => 'video1080',  // کاربر: video1080
+            'video480p' => 'video480p',
+            'video720p' => 'video720p',
+            'video1080p' => 'video1080p',
             'fifu_image_alt' => 'fifu_image_alt',
             'fifu_image_url' => 'fifu_image_url',
         );
         
-        // اگر در theme_mapping تنظیم شده باشد، از آن استفاده کن
+        // نگاشت سازگاری برای قالب‌هایی که کلید متفاوت دارند (از تنظیمات Scout)
+        // اگر کاربر در Scout تنظیم کرده art_name -> artist, از همان استفاده می‌کنیم
         if (isset($theme_mapping[$key]) && !empty($theme_mapping[$key])) {
-            $theme_defaults[$key] = $theme_mapping[$key];
+            $theme_defaults[$key] = sanitize_key($theme_mapping[$key]);
         }
         
-        if (!$this->is_active) {
-            return isset($theme_defaults[$key]) ? $theme_defaults[$key] : $key;
-        }
-        
-        // اگر ترانه‌یار فعال است، ابتدا از متد رسمی آن بخوان
-        if (method_exists('TaranehYar_Settings', 'meta_key')) {
-            $official = \TaranehYar_Settings::meta_key($key);
-            // اگر رسمی خالی نبود، از آن استفاده کن، وگرنه از نگاشت تم
-            if (!empty($official)) {
-                // اگر کاربر در تنظیمات ترانه‌یار مقدار سفارشی وارد کرده باشد، همان برگردانده می‌شود
-                // اما اگر مقدار رسمی برابر با کلید پیش‌فرض قدیمی باشد و نگاشت تم متفاوت باشد، نگاشت تم را ترجیح بده
-                // برای سازگاری، اگر تنظیمات ترانه‌یار مقدار سفارشی دارد، همان را برگردان
-                $configured = isset($this->settings['meta_key_' . $key]) ? $this->settings['meta_key_' . $key] : '';
-                if (!empty($configured) && is_scalar($configured)) {
-                    $san = sanitize_key($configured);
-                    if ($san !== '') {
-                        return $san;
-                    }
+        // اگر ترانه‌یار فعال است، اولویت با تنظیمات ترانه‌یار
+        if ($this->is_active) {
+            $configured = isset($this->settings['meta_key_' . $key]) ? $this->settings['meta_key_' . $key] : '';
+            if (!empty($configured) && is_scalar($configured)) {
+                $san = sanitize_key($configured);
+                if ($san !== '') {
+                    return $san;
                 }
-                // اگر تنظیم سفارشی ندارد و نگاشت تم متفاوت است، نگاشت تم را برگردان
-                if (isset($theme_defaults[$key]) && $theme_defaults[$key] !== $key && $official === $key) {
-                    return $theme_defaults[$key];
-                }
-                return $official;
             }
-        }
-        
-        // Fallback به تنظیمات مستقیم ty_options
-        $configured = isset($this->settings['meta_key_' . $key]) ? $this->settings['meta_key_' . $key] : '';
-        $configured = is_scalar($configured) ? sanitize_key($configured) : '';
-        if ($configured !== '') {
-            return $configured;
+            if (method_exists('TaranehYar_Settings', 'meta_key')) {
+                $official = \TaranehYar_Settings::meta_key($key);
+                if (!empty($official)) {
+                    return $official;
+                }
+            }
         }
         
         return isset($theme_defaults[$key]) ? $theme_defaults[$key] : $key;
@@ -262,14 +247,25 @@ class TaranehyarAdapter {
             }
         }
         
-        // Taxonomies - singer
+        // Taxonomies - singer: اگر خواننده با نام فارسی وجود دارد، همان را استفاده کن (عدم ایجاد تکراری)
         if (!empty($data['artist_fa'])) {
             $taxonomy = $this->get_singer_taxonomy();
             if (taxonomy_exists($taxonomy)) {
-                wp_set_object_terms($post_id, $data['artist_fa'], $taxonomy);
-            } else {
-                // اگر تاکسونومی وجود ندارد، سعی کن ایجاد کنی یا لااقل به عنوان تگ ذخیره کن
-                // برای سازگاری، نام خواننده را به تگ‌ها هم اضافه کن
+                $artist_name = trim($data['artist_fa']);
+                // بررسی وجود ترم با نام دقیق فارسی
+                $existing_term = term_exists($artist_name, $taxonomy);
+                if ($existing_term) {
+                    $term_id = is_array($existing_term) ? $existing_term['term_id'] : $existing_term;
+                    wp_set_object_terms($post_id, array(intval($term_id)), $taxonomy);
+                } else {
+                    // بررسی با slug فارسی
+                    $existing_by_slug = get_term_by('name', $artist_name, $taxonomy);
+                    if ($existing_by_slug) {
+                        wp_set_object_terms($post_id, array(intval($existing_by_slug->term_id)), $taxonomy);
+                    } else {
+                        wp_set_object_terms($post_id, $artist_name, $taxonomy);
+                    }
+                }
             }
         }
         

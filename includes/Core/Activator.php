@@ -154,9 +154,9 @@ class Activator {
             );
             $updated = true;
         }
-        if (empty($options['provider_policies']['nicmusic'])) {
+        if (empty($options['provider_policies']['mybia2music'])) {
             if (!isset($options['provider_policies'])) $options['provider_policies'] = array();
-            $options['provider_policies']['nicmusic'] = array(
+            $options['provider_policies']['mybia2music'] = array(
                 'enabled' => 1,
                 'rate_limit' => 2,
                 'license_status' => 'needs_review',
@@ -166,16 +166,25 @@ class Activator {
             );
             $updated = true;
         }
-        if (empty($options['provider_policies']['ganja2music'])) {
+        if (empty($options['provider_policies']['ahaang'])) {
             if (!isset($options['provider_policies'])) $options['provider_policies'] = array();
-            $options['provider_policies']['ganja2music'] = array(
+            $options['provider_policies']['ahaang'] = array(
                 'enabled' => 1,
-                'rate_limit' => 3,
+                'rate_limit' => 2,
                 'license_status' => 'needs_review',
                 'allow_audio_download' => 1,
                 'allow_cover_download' => 1,
                 'metadata_allowed' => 1,
             );
+            $updated = true;
+        }
+        // غیرفعال کردن providerهای قدیمی (nicmusic, ganja2music) - فقط mybia2music و ahaang مبنا هستند
+        if (isset($options['provider_policies']['nicmusic']) && $options['provider_policies']['nicmusic']['enabled']) {
+            $options['provider_policies']['nicmusic']['enabled'] = 0;
+            $updated = true;
+        }
+        if (isset($options['provider_policies']['ganja2music']) && $options['provider_policies']['ganja2music']['enabled']) {
+            $options['provider_policies']['ganja2music']['enabled'] = 0;
             $updated = true;
         }
         if (isset($options['provider_policies']['mybia2music'])) {
@@ -219,7 +228,7 @@ class Activator {
                     'allow_cover_download' => 1,
                     'metadata_allowed' => 1,
                 ),
-                'nicmusic' => array(
+                'ahaang' => array(
                     'enabled' => 1,
                     'rate_limit' => 2,
                     'license_status' => 'needs_review',
@@ -227,8 +236,16 @@ class Activator {
                     'allow_cover_download' => 1,
                     'metadata_allowed' => 1,
                 ),
+                'nicmusic' => array(
+                    'enabled' => 0,
+                    'rate_limit' => 2,
+                    'license_status' => 'needs_review',
+                    'allow_audio_download' => 1,
+                    'allow_cover_download' => 1,
+                    'metadata_allowed' => 1,
+                ),
                 'ganja2music' => array(
-                    'enabled' => 1,
+                    'enabled' => 0,
                     'rate_limit' => 3,
                     'license_status' => 'needs_review',
                     'allow_audio_download' => 1,
