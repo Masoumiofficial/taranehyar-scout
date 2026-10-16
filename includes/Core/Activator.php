@@ -131,8 +131,9 @@ class Activator {
             $wpdb->query("ALTER TABLE " . TSCOUT_TABLE_DISCOVERIES . " ADD COLUMN lyrics longtext DEFAULT NULL AFTER video_url_1080");
         }
         
-        // به‌روزرسانی تنظیمات برای نسخه 1.0.1
+        // به‌روزرسانی تنظیمات برای نسخه 1.0.4
         $options = get_option('tscout_options', array());
+        $updated = false;
         if (empty($options['theme_meta_mapping'])) {
             $options['theme_meta_mapping'] = array(
                 'singer_taxonomy' => 'singer',
@@ -151,11 +152,31 @@ class Activator {
                 'video720p' => 'video720',
                 'video1080p' => 'video1080',
             );
-            $options['allow_external_urls'] = 1;
-            if (isset($options['provider_policies']['mybia2music'])) {
+            $updated = true;
+        }
+        if (empty($options['provider_policies']['nicmusic'])) {
+            if (!isset($options['provider_policies'])) $options['provider_policies'] = array();
+            $options['provider_policies']['nicmusic'] = array(
+                'enabled' => 1,
+                'rate_limit' => 2,
+                'license_status' => 'needs_review',
+                'allow_audio_download' => 1,
+                'allow_cover_download' => 1,
+                'metadata_allowed' => 1,
+            );
+            $updated = true;
+        }
+        if (isset($options['provider_policies']['mybia2music'])) {
+            if (empty($options['provider_policies']['mybia2music']['allow_audio_download'])) {
                 $options['provider_policies']['mybia2music']['allow_audio_download'] = 1;
-                $options['provider_policies']['mybia2music']['allow_cover_download'] = 1;
+                $updated = true;
             }
+        }
+        if (empty($options['allow_external_urls'])) {
+            $options['allow_external_urls'] = 1;
+            $updated = true;
+        }
+        if ($updated) {
             update_option('tscout_options', $options, false);
         }
         
@@ -182,7 +203,15 @@ class Activator {
                     'enabled' => 1,
                     'rate_limit' => 2,
                     'license_status' => 'needs_review',
-                    'allow_audio_download' => 1, // اصلاح: اجازه انتقال فایل پس از تایید مجوز
+                    'allow_audio_download' => 1,
+                    'allow_cover_download' => 1,
+                    'metadata_allowed' => 1,
+                ),
+                'nicmusic' => array(
+                    'enabled' => 1,
+                    'rate_limit' => 2,
+                    'license_status' => 'needs_review',
+                    'allow_audio_download' => 1,
                     'allow_cover_download' => 1,
                     'metadata_allowed' => 1,
                 ),
