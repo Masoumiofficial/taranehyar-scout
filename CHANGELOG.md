@@ -1,5 +1,50 @@
 # Changelog - Taranehyar Scout
 
+## 1.0.8 - 2026-10-17
+
+### بازطراحی کامل - مبنا فقط mybia2music + ahaang - باگ‌گیری صفر خطا
+
+#### تغییر مبنا بر اساس درخواست کاربر
+- فقط دو منبع اصلی: **mybia2music.com** و **ahaang.com** - دقیقاً مانند اسکریپت وین‌تم
+- **NicMusicProvider** و **Ganja2MusicProvider** از رجیستری حذف شدند (فایل‌ها باقی می‌مانند اما ثبت نمی‌شوند) - سیاست enabled=0
+- **AhaangProvider** جدید اضافه شد - https://ahaang.com/
+
+#### AhaangProvider - رسانه آهنگ
+- جستجو: `?s={artist}` - سازگار با EN و FA - پارس بخش تک‌آهنگ‌ها
+- تست: `روزبه بمانی بوسه آخر` - هر دو جستجوی `roozbeh bemani` و `روزبه بمانی` نتیجه می‌دهد
+- استخراج FA از H2 `روزبه بمانی | بوسه آخر` + جزئیات `عنوان اثر` و `خواننده`
+- EN از `Download New Music Roozbeh Bemani – Boose Akhar` + fallback از URL dl `Roozbeh Bemani - Boose Akhar.mp3`
+- اعتبارات کامل: آهنگساز حامد حسینی, تنظیم سعید زمانی, ترانه سرا روزبه بمانی, نوازنده سجاد علیزاده/یاسین آران, تولید آوای هنر, سبک پاپ, کد آهنگ 346269, تاریخ انتشار
+- کاور از og:image یا wp-content/uploads با کیفیت اصلی
+- MP3 از dl.ahaang.com با تشخیص 128 `(128)` و 320
+- متن ترانه ورس به ورس با `♪♪♪` و جدا‌کننده
+- نرخ محدود 2 ثانیه
+
+#### MyBia2MusicProvider - بازنویسی کامل استخراج
+- جستجو: فقط `/ID/slug` - فیلتر playlist/artists/genre/mood/publisher
+- کاور: اولویت og:image, سپس sv*.mybia2music.com jpg اصلی, سپس thumbs _500 (تبدیل _300 به _500)
+- MP3: تشخیص دقیق `[128]` و 320 از sv2.mybia2music.com
+- اعتبارات: ترانه سرا, آهنگساز, تنظیم کننده, میکس و مستر, نوازنده گیتار
+- متن ترانه: چند روش - #lyric, .lyric, h2 متن آهنگ, طولانی‌ترین پاراگراف فارسی - تمیز ورس به ورس
+- عنوان: `دانلود آهنگ روزبه بمانی بوسه آخر Roozbeh Bemani Boose Akhar` → FA `بوسه آخر` + EN `Boose Akhar` بدون نام هنرمند
+- سازگار با هر دو جستجوی فارسی و انگلیسی
+
+#### سازگاری با ترانه‌یار 1.0.8
+- بررسی کامل taranehyar v1.0.8 (تگ v1.0.8): META_KEY_DEFAULTS شامل musics_type, artist_en, song_en, art_name, track_name, music_txt, music128, music320, album, album128, album320, video480p, video720p, video1080p, fifu_image_alt
+- **TaranehyarAdapter**: بازنویسی get_meta_key - اولویت با تنظیمات ty_options (کاربر می‌تواند art_name->artist تنظیم کند برای رز موزیک), fallback به META_KEY_DEFAULTS رسمی, سپس theme_mapping Scout
+- **create_post**: عدم ایجاد تکراری singer - term_exists بررسی نام فارسی, reuse term_id
+- **Publisher**: عنوان دقیق `دانلود آهنگ {FA artist} به نام {FA track}` بدون آلودگی انگلیسی, محتوا بدون لینک منبع mybia2music, فقط `[دانلود آهنگ جدید](home)` + `**[FA artist](tag/urlencoded FA)** به نام **FA track**` + credits `ترانه و موزیک: ...` + `Download New Music **[EN artist](tag/EN)** – **EN track**`
+- **HostDL**: archive_path با TaranehYar_Archive::path (date-free) از v1.0.8, file_url با TaranehYar_Album_Meta::file_url
+- **UrlValidator**: اضافه دامنه‌های ahaang.com, dl.ahaang.com, sv1.mybia2music.com
+
+#### باگ‌گیری کامل - صفر خطا
+- **Normalizer**: clean_fa_title برای `بوسه آخر از روزبه بمانی` → `بوسه آخر`, حذف `دانلود آهنگ جدید`, حذف نام هنرمند از ابتدای عنوان
+- **Publisher**: clean_artist_fa, clean_track_fa, format_lyrics_verses با حذف `دانلود آهنگ با کیفیت` و `پخش آهنگ`
+- **ProviderRegistry**: فقط mybia2music و ahaang + mock
+- **Activator**: سیاست ahaang, غیرفعال‌سازی nicmusic/ganja2music, migrate خودکار, theme_meta_mapping برای رز موزیک
+- **Security**: SSRF, Path Traversal, Capability, Nonce حفظ شد
+- **ZIP**: ساختار صحیح taranehyar-scout/taranehyar-scout.php 120K+
+
 ## 1.0.7 - 2026-10-17
 
 ### ویژگی جدید: پشتیبانی از گانجا2موزیک
