@@ -4,7 +4,7 @@ namespace TaranehyarScout\Core;
 if (!defined('ABSPATH')) exit;
 
 class Constants {
-    const VERSION = '1.0.9';
+    const VERSION = '1.0.10';
     const TEXT_DOMAIN = 'taranehyar-scout';
     
     // Matching thresholds

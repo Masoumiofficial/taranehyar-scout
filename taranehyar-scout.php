@@ -2,8 +2,8 @@
 /**
  * Plugin Name:       Taranehyar Scout
  * Plugin URI:        https://etehadwp.com/
- * Description:       کشف، تطبیق و مدیریت هوشمند آثار موسیقی در وردپرس - مکمل ترانه‌یار 1.0.9. کشف کن، تطبیق بده، هوشمندانه منتشر کن. سازگار با قالب رز موزیک rozmusic.com - مبنا: فقط بیا2موزیک - رفع باگ آپلود و نام خواننده
- * Version:           1.0.9
+ * Description:       کشف، تطبیق و مدیریت هوشمند آثار موسیقی در وردپرس - مکمل ترانه‌یار 1.0.10. کشف کن، تطبیق بده، هوشمندانه منتشر کن. سازگار با قالب رز موزیک rozmusic.com - مبنا: فقط بیا2موزیک - رفع کامل نام خواننده و شناسایی موزیک‌ها (مجید اصلاحی)
+ * Version:           1.0.10
  * Author:            اتحاد وردپرس
  * Author URI:        https://etehadwp.com/
  * License:           GPL-2.0-or-later
@@ -24,7 +24,7 @@ if (!defined('ABSPATH')) {
 }
 
 // Constants
-define('TSCOUT_VERSION', '1.0.9');
+define('TSCOUT_VERSION', '1.0.10');
 define('TSCOUT_PLUGIN_FILE', __FILE__);
 define('TSCOUT_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('TSCOUT_PLUGIN_URL', plugin_dir_url(__FILE__));
