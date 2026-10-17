@@ -159,13 +159,64 @@ class MyBia2MusicProvider implements ProviderInterface {
             if (empty($title) || mb_strlen($title) < 2) continue;
             if (mb_strlen($title) > 200) continue;
             
+            // استخراج artist_fa و track_fa از عنوان فارسی "دانلود آهنگ مجید اصلاحی قدم بزنیم"
+            $artist_fa_from_title = '';
+            $track_fa_from_title = '';
+            $clean_title_for_parse = trim($title);
+            $clean_title_for_parse = preg_replace('/^دانلود آهنگ جدید\s*/u', '', $clean_title_for_parse);
+            $clean_title_for_parse = preg_replace('/^دانلود آهنگ\s*/u', '', $clean_title_for_parse);
+            $clean_title_for_parse = trim($clean_title_for_parse);
+            if (!empty($clean_title_for_parse) && preg_match('/[\x{0600}-\x{06FF}]/u', $clean_title_for_parse)) {
+                $words = preg_split('/\s+/u', $clean_title_for_parse);
+                if (count($words) >= 3) {
+                    // تشخیص 2 یا 3 کلمه‌ای بودن نام خواننده
+                    $is_three_word = false;
+                    if (count($words) >= 5) $is_three_word = true; // وحید حاجی تبار شب شعر = 5 کلمه
+                    if (isset($words[1]) && $words[1] === 'حاجی') $is_three_word = true;
+                    if (isset($words[1]) && mb_strpos($words[1], 'الله') !== false) $is_three_word = true;
+                    // اگر اسلاگ هنرمند 2 بخشی ولی فارسی 3 بخشی است، مثل vahid-hajitabar
+                    if (preg_match('/^[a-z]+-hajitabar-/i', $slug)) $is_three_word = true;
+                    
+                    if ($is_three_word && count($words) >= 4) {
+                        $artist_fa_from_title = $words[0] . ' ' . $words[1] . ' ' . $words[2];
+                        $track_fa_from_title = implode(' ', array_slice($words, 3));
+                    } else {
+                        $artist_fa_from_title = $words[0] . ' ' . $words[1];
+                        $track_fa_from_title = implode(' ', array_slice($words, 2));
+                    }
+                    // پاکسازی
+                    $artist_fa_from_title = trim($artist_fa_from_title);
+                    $track_fa_from_title = trim($track_fa_from_title);
+                    if (mb_strlen($track_fa_from_title) < 2) $track_fa_from_title = '';
+                }
+            }
+            // استخراج artist_en و track_en از اسلاگ
+            $artist_en_from_slug = '';
+            $track_en_from_slug = '';
+            $slug_parts = explode('-', $slug);
+            if (count($slug_parts) >= 3) {
+                // حدس: 2 بخش اول هنرمند، بقیه آهنگ (برای majid-eslahi-ghadam-bezanim)
+                // اگر 4 بخش یا بیشتر، 2+بقیه
+                // اگر اسلاگ با hajitabar شروع، 2 بخش هنرمند
+                $artist_slug_guess = implode('-', array_slice($slug_parts, 0, 2));
+                $track_slug_guess = implode('-', array_slice($slug_parts, 2));
+                // اگر track_slug_guess شامل hajitabar بود، یعنی هنرمند 2 بخشی نیست؟ ولی برای vahid-hajitabar-shabe-sher، artist 2 بخشی درست است
+                $artist_en_from_slug = $this->slug_to_en_name($artist_slug_guess);
+                $track_en_from_slug = $this->slug_to_en_name($track_slug_guess);
+            }
+            
             $track = array(
                 'external_id' => $external_id,
                 'provider' => $this->get_id(),
                 'source_url' => $href,
                 'slug' => $slug,
                 'title' => $title,
-                'artist_en' => $artist_en,
+                'title_fa' => !empty($track_fa_from_title) ? $track_fa_from_title : $clean_title_for_parse,
+                'artist_fa' => $artist_fa_from_title,
+                'artist_en' => !empty($artist_en_from_slug) ? $artist_en_from_slug : $artist_en,
+                'title_en' => $track_en_from_slug,
+                'track_en_from_slug' => $track_en_from_slug,
+                'artist_slug_en' => isset($artist_slug_guess) ? $artist_slug_guess : '',
                 'type' => $this->detect_type_from_slug($slug),
                 'cover_url' => $this->extract_cover_from_link($link, $xpath),
             );
@@ -173,9 +224,12 @@ class MyBia2MusicProvider implements ProviderInterface {
             $count++;
         }
         
-        // Enrich 10 تای اول با جزئیات کامل
+        // Enrich همه نتایج تا limit با جزئیات کامل (برای شناسایی موزیک‌ها - مجید اصلاحی 40+ نتیجه)
+        // قبلاً 10 بود، الان همه تا limit
         $enriched = array();
-        $enrich_limit = min(10, count($tracks));
+        $enrich_limit = min($limit, count($tracks));
+        // برای جلوگیری از بلاک، حداکثر 40 تا enrich می‌کنیم
+        $enrich_limit = min($enrich_limit, 40);
         for ($i = 0; $i < count($tracks); $i++) {
             if ($i < $enrich_limit) {
                 $details = $this->get_track_details($tracks[$i]['source_url']);
